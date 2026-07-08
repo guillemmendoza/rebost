@@ -27,6 +27,8 @@
   --walnut:#7B5B3F;
   --ochre:#AD7C33;
   --brick:#9C4A3D;
+  --accent:#2F6B4F;
+  --accent-2:#C6862E;
   --radius:5px;
 }
 *{box-sizing:border-box;}
@@ -101,7 +103,7 @@ input,select{font-family:inherit;}
 .extra-x:hover{color:var(--brick);}
 .extra-form{display:flex;gap:6px;margin-top:8px;}
 .extra-form input{flex:1;border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:13px;background:var(--bg);}
-.extra-form button{border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:4px;padding:6px 10px;font-size:12px;}
+.extra-form button{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:4px;padding:6px 10px;font-size:12px;}
 .activity-row{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;}
 .activity-row:last-child{border-bottom:none;}
 .activity-text{flex:1;color:var(--ink-soft);line-height:1.4;}
@@ -127,7 +129,8 @@ input,select{font-family:inherit;}
 .scan-btn{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:4px;padding:0 10px;font-size:12px;white-space:nowrap;}
 .scan-btn:hover{background:var(--line);}
 .modal-actions{display:flex;justify-content:space-between;align-items:center;margin-top:18px;}
-.btn-primary{background:var(--ink);color:var(--surface);border:1px solid var(--ink);border-radius:4px;padding:9px 16px;font-size:13px;}
+.btn-primary{background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:4px;padding:9px 16px;font-size:13px;}
+.btn-primary:hover{background:#255740;}
 .btn-ghost{background:none;border:none;color:var(--ink-soft);font-size:13px;}
 .btn-ghost:hover{color:var(--ink);}
 .btn-delete{background:none;border:none;color:var(--brick);font-size:12px;}
@@ -150,8 +153,8 @@ input,select{font-family:inherit;}
 
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:13px;padding:10px 18px;border-radius:20px;z-index:60;}
 
-.fab{position:fixed;bottom:22px;right:22px;background:var(--ink);color:var(--surface);border:none;border-radius:24px;padding:13px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 14px rgba(47,44,37,.25);z-index:40;display:flex;align-items:center;gap:7px;}
-.fab:hover{background:#413D33;}
+.fab{position:fixed;bottom:22px;right:22px;background:var(--accent);color:#fff;border:none;border-radius:24px;padding:13px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 14px rgba(47,44,37,.25);z-index:40;display:flex;align-items:center;gap:7px;}
+.fab:hover{background:#255740;}
 .fab-icon{font-size:16px;line-height:1;}
 .quick-modal{max-width:320px;}
 .quick-modal input{width:100%;border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-size:15px;background:var(--bg);color:var(--ink);}
@@ -222,6 +225,43 @@ async function logActivity(action, detail){
   try{ await sb.from('activity').insert({actor: ME, action, detail}); }catch(e){}
 }
 
+const NOTIFY_KEY = 'rebost-last-notify-date';
+const todayStr = () => new Date().toISOString().slice(0,10);
+
+async function maybeNotify(){
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  if(localStorage.getItem(NOTIFY_KEY) === todayStr()) return;
+  const low = DATA.items.filter(i => i.min_threshold > 0 && i.quantity <= i.min_threshold);
+  const expiring = DATA.items.filter(i => i.expiry_date && daysUntil(i.expiry_date) <= EXPIRY_WARN_DAYS);
+  if(low.length === 0 && expiring.length === 0) return;
+  const parts = [];
+  if(low.length) parts.push(`${low.length} per reposar`);
+  if(expiring.length) parts.push(`${expiring.length} que caduquen aviat`);
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    reg.showNotification('Rebost', {body: parts.join(' · '), icon:'icon-192.png', badge:'icon-192.png'});
+    localStorage.setItem(NOTIFY_KEY, todayStr());
+  }catch(e){}
+}
+
+async function tryPeriodicSync(){
+  try{
+    const reg = await navigator.serviceWorker.ready;
+    if('periodicSync' in reg){
+      const status = await navigator.permissions.query({name:'periodic-background-sync'});
+      if(status.state === 'granted') await reg.periodicSync.register('rebost-check', {minInterval: 24*60*60*1000});
+    }
+  }catch(e){}
+}
+
+async function enableNotifications(){
+  if(!('Notification' in window)){ showToast('Aquest navegador no admet notificacions.'); return; }
+  const perm = await Notification.requestPermission();
+  if(perm === 'granted'){ showToast('Avisos activats.'); maybeNotify(); tryPeriodicSync(); }
+  else showToast('Avisos no activats.');
+  render();
+}
+
 async function init(){
   ME = loadPerson();
   try{
@@ -232,6 +272,7 @@ async function init(){
   }
   render();
   subscribeRealtime();
+  maybeNotify();
 }
 
 function subscribeRealtime(){
@@ -389,7 +430,9 @@ function render(){
           <p class="eyebrow">Casa</p>
           <h1 class="h-title">Rebost</h1>
         </div>
-        <div class="person-pill">
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${(('Notification' in window) && Notification.permission === 'default') ? `<button class="side-action" id="notifyBtn">Activa avisos</button>` : ''}
+          <div class="person-pill">
           <button class="person-btn" id="personBtn">
             <span class="dot" style="background:${personColor(ME)}"></span>
             ${esc(ME)}
@@ -401,6 +444,7 @@ function render(){
                   <span class="dot" style="background:${p.color}"></span>${esc(p.name)}
                 </button>`).join('')}
             </div>` : ''}
+          </div>
         </div>
       </div>
 
@@ -720,6 +764,8 @@ function restoreSearchFocus(){
 function bindEvents(){
   const personBtn = document.getElementById('personBtn');
   if(personBtn) personBtn.onclick = () => { personMenuOpen = !personMenuOpen; render(); };
+  const notifyBtn = document.getElementById('notifyBtn');
+  if(notifyBtn) notifyBtn.onclick = enableNotifications;
   root.querySelectorAll('[data-person]').forEach(b => {
     b.onclick = () => { personMenuOpen = false; setPerson(b.dataset.person); };
   });
