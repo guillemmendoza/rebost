@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rebost</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
 
@@ -157,7 +158,6 @@ let modalEditId = null;
 let personMenuOpen = false;
 let searchTerm = '';
 let scannerOpen = false;
-let scanStream = null;
 let connError = false;
 let toastMsg = null;
 let toastTimer = null;
@@ -523,41 +523,41 @@ function renderScanner(){
 
 /* ---------- scanning ---------- */
 
+let zxingReader = null;
+function getReader(){
+  if(!zxingReader){
+    const hints = new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+      ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+      ZXing.BarcodeFormat.UPC_A, ZXing.BarcodeFormat.UPC_E,
+      ZXing.BarcodeFormat.CODE_128
+    ]);
+    zxingReader = new ZXing.BrowserMultiFormatReader(hints);
+  }
+  return zxingReader;
+}
 function openScanner(){ scannerOpen = true; render(); }
 function closeScanner(){
-  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  try{ getReader().reset(); }catch(e){}
   scannerOpen = false; render();
 }
 async function startCamera(){
   const video = document.getElementById('scanVideo');
   const hint = document.getElementById('scanHint');
-  if(!video) return;
+  if(!video || typeof ZXing === 'undefined') return;
+  const reader = getReader();
   try{
-    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
-    video.srcObject = scanStream;
-    await video.play();
-    if('BarcodeDetector' in window){
-      const detector = new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
-      scanLoop(video, detector);
-    }else if(hint){
-      hint.textContent = 'Aquest navegador no llegeix codis automàticament. Escriu-lo a sota.';
-    }
+    await reader.decodeFromConstraints(
+      { video: { facingMode: {ideal:'environment'} } },
+      video,
+      (result, err) => { if(result) applyScannedCode(result.getText()); }
+    );
   }catch(e){
     if(hint) hint.textContent = 'No hi ha accés a la càmera aquí. Escriu el codi a sota.';
   }
 }
-function scanLoop(video, detector){
-  if(!scannerOpen) return;
-  detector.detect(video).then(codes => {
-    if(codes.length > 0){
-      applyScannedCode(codes[0].rawValue);
-    }else{
-      requestAnimationFrame(() => scanLoop(video, detector));
-    }
-  }).catch(() => requestAnimationFrame(() => scanLoop(video, detector)));
-}
 function applyScannedCode(code){
-  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  try{ getReader().reset(); }catch(e){}
   scannerOpen = false;
   modalDraft.barcode = code;
   const cached = BARCODES[code];
