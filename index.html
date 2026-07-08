@@ -33,6 +33,19 @@
   --accent-soft:#E3F0EA;
   --radius:5px;
 }
+:root[data-theme="dark"]{
+  --bg:#1E1C18;
+  --surface:#28251F;
+  --surface-2:#332F27;
+  --line:#423D33;
+  --ink:#EDEAE2;
+  --ink-soft:#B0AA98;
+  --ink-faint:#7A7568;
+  --brick:#C96F5C;
+  --accent-2:#D89A45;
+}
+html{transition:background-color .15s ease;}
+body,#root,.wrap{transition:background-color .15s ease, color .15s ease;}
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
 #root{min-height:100vh;}
@@ -49,6 +62,8 @@ input,select{font-family:inherit;}
 .eyebrow{font-size:11px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin:0 0 2px;}
 .h-title{font-family:'Fraunces',serif;font-weight:600;font-size:32px;margin:0;}
 .person-pill{position:relative;}
+.icon-btn{width:34px;height:34px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink-soft);font-size:15px;display:flex;align-items:center;justify-content:center;flex:none;}
+.icon-btn:hover{color:var(--ink);border-color:var(--ink-soft);}
 .person-btn{display:flex;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:20px;padding:6px 12px 6px 8px;font-size:13px;color:var(--ink);}
 .dot{width:9px;height:9px;border-radius:50%;flex:none;}
 .person-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 4px 14px rgba(47,44,37,.1);z-index:20;min-width:140px;overflow:hidden;}
@@ -73,6 +88,7 @@ input,select{font-family:inherit;}
 .item-row:hover{background:rgba(47,44,37,.025);cursor:pointer;}
 .item-main{flex:1;min-width:0;}
 .item-name{font-size:14px;font-weight:500;}
+.item-brand{font-weight:400;color:var(--ink-faint);font-size:12px;}
 .item-sub{font-size:11px;color:var(--ink-faint);margin-top:2px;}
 .item-sub.low{color:var(--brick);}
 .item-sub.warn{color:var(--ochre);}
@@ -119,7 +135,12 @@ input,select{font-family:inherit;}
 
 /* modal */
 .overlay{position:fixed;inset:0;background:rgba(47,44,37,.35);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;}
-.modal{background:var(--surface);border-radius:var(--radius);padding:22px;width:100%;max-width:360px;}
+.modal{background:var(--surface);border-radius:var(--radius);padding:22px;width:100%;max-width:360px;max-height:88vh;overflow-y:auto;}
+.field textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:8px 9px;font-size:14px;background:var(--bg);color:var(--ink);font-family:inherit;resize:vertical;}
+.expiry-type-row{display:flex;gap:8px;}
+.radio-pill{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:16px;padding:6px 12px;font-size:12.5px;color:var(--ink-soft);flex:1;justify-content:center;cursor:pointer;}
+.radio-pill input{width:auto;margin:0;}
+.radio-pill:has(input:checked){border-color:var(--accent);color:var(--ink);background:var(--accent-soft);}
 .modal h3{font-family:'Fraunces',serif;font-size:18px;margin:0 0 16px;}
 .field{margin-bottom:12px;}
 .field label{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;}
@@ -155,6 +176,20 @@ input,select{font-family:inherit;}
 
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:13px;padding:10px 18px;border-radius:20px;z-index:60;}
 
+.admin-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);margin:0 0 10px;}
+.admin-person-row{border-bottom:1px solid var(--line);padding:10px 0;}
+.admin-person-row:last-of-type{border-bottom:none;}
+.admin-name-input{flex:1;border:1px solid var(--line);border-radius:4px;padding:5px 8px;font-size:13px;background:var(--bg);color:var(--ink);}
+.admin-add-row{display:flex;gap:8px;align-items:center;margin-top:10px;}
+.admin-add-row input{flex:1;border:1px solid var(--line);border-radius:4px;padding:8px 10px;font-size:13px;background:var(--bg);color:var(--ink);}
+.slider-panel{margin-top:12px;padding:12px;background:var(--bg);border-radius:6px;}
+.slider-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.slider-row label{width:80px;font-size:11.5px;color:var(--ink-soft);flex:none;}
+.slider{-webkit-appearance:none;appearance:none;flex:1;height:6px;border-radius:3px;background:var(--line);outline:none;}
+.slider::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--surface);border:2px solid var(--ink);cursor:pointer;}
+.slider::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--surface);border:2px solid var(--ink);cursor:pointer;}
+.slider-hue{background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);}
+
 .fab{position:fixed;bottom:22px;right:22px;background:var(--accent);color:#fff;border:none;border-radius:24px;padding:13px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 14px rgba(47,44,37,.25);z-index:40;display:flex;align-items:center;gap:7px;}
 .fab:hover{background:var(--accent-hover);}
 .fab-icon{font-size:16px;line-height:1;}
@@ -171,17 +206,14 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const CATS = ['Nevera','Congelador','Rebost'];
-const PEOPLE = [
-  {name:'Guillem', color:'#4B5842'},
-  {name:'Yoli', color:'#B0507E'},
-  {name:'Roger', color:'#3568A0'}
-];
 const DEFAULT_ACCENT = '#2F6B4F';
 const EXPIRY_WARN_DAYS = 5;
+const ADMIN_PASSWORD = 'guillem';
 
-let DATA = {items:[], extras:[], activity:[], shortcuts:[]};
+let DATA = {items:[], extras:[], activity:[], shortcuts:[], people:[]};
 let BARCODES = {};
 let ME = null;
+let theme = 'light';
 let modalOpen = false;
 let modalDraft = null;
 let modalEditId = null;
@@ -194,10 +226,16 @@ let manageShortcuts = false;
 let connError = false;
 let toastMsg = null;
 let toastTimer = null;
+let adminUnlocked = false;
+let adminScreen = null; // null | 'password' | 'panel'
+let adminPassError = false;
+let editingPersonId = null;
+let addingPerson = false;
+let adminColorDraft = null; // {personId, h, s, l}
 
 const root = document.getElementById('root');
 const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const personColor = (name) => (PEOPLE.find(p=>p.name===name)||{}).color || 'var(--ink-faint)';
+const personColor = (name) => (DATA.people.find(p=>p.name===name)||{}).color || DEFAULT_ACCENT;
 
 function shade(hex, amt){
   const n = hex.replace('#','');
@@ -206,12 +244,54 @@ function shade(hex, amt){
   const b = Math.max(0, Math.min(255, parseInt(n.substring(4,6),16) + amt));
   return '#' + [r,g,b].map(v => Math.round(v).toString(16).padStart(2,'0')).join('');
 }
+function hexToHsl(hex){
+  const n = hex.replace('#','');
+  let r = parseInt(n.substring(0,2),16)/255, g = parseInt(n.substring(2,4),16)/255, b = parseInt(n.substring(4,6),16)/255;
+  const max = Math.max(r,g,b), min = Math.min(r,g,b);
+  let h, s, l = (max+min)/2;
+  if(max === min){ h = s = 0; }
+  else{
+    const d = max-min;
+    s = l > 0.5 ? d/(2-max-min) : d/(max+min);
+    switch(max){
+      case r: h = (g-b)/d + (g<b?6:0); break;
+      case g: h = (b-r)/d + 2; break;
+      default: h = (r-g)/d + 4;
+    }
+    h *= 60;
+  }
+  return {h: Math.round(h), s: Math.round(s*100), l: Math.round(l*100)};
+}
+function hslToHex(h, s, l){
+  s /= 100; l /= 100;
+  const c = (1-Math.abs(2*l-1))*s, x = c*(1-Math.abs((h/60)%2-1)), m = l-c/2;
+  let r,g,b;
+  if(h<60){r=c;g=x;b=0;} else if(h<120){r=x;g=c;b=0;} else if(h<180){r=0;g=c;b=x;}
+  else if(h<240){r=0;g=x;b=c;} else if(h<300){r=x;g=0;b=c;} else {r=c;g=0;b=x;}
+  const toHex = v => Math.round((v+m)*255).toString(16).padStart(2,'0');
+  return '#' + toHex(r) + toHex(g) + toHex(b);
+}
 function applyPersonTheme(){
-  const base = personColor(ME);
-  const hex = (base && base.startsWith('#')) ? base : DEFAULT_ACCENT;
+  const hex = personColor(ME) || DEFAULT_ACCENT;
   document.documentElement.style.setProperty('--accent', hex);
-  document.documentElement.style.setProperty('--accent-hover', shade(hex, -22));
-  document.documentElement.style.setProperty('--accent-soft', shade(hex, 150));
+  document.documentElement.style.setProperty('--accent-hover', shade(hex, theme==='dark' ? 26 : -22));
+  document.documentElement.style.setProperty('--accent-soft', shade(hex, theme==='dark' ? -125 : 150));
+}
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme', theme);
+  applyPersonTheme();
+}
+function loadTheme(){
+  try{ return localStorage.getItem('rebost-theme') || 'light'; }catch(e){ return 'light'; }
+}
+function saveTheme(t){
+  try{ localStorage.setItem('rebost-theme', t); }catch(e){}
+}
+function toggleTheme(){
+  theme = theme === 'dark' ? 'light' : 'dark';
+  saveTheme(theme);
+  applyTheme();
+  render();
 }
 
 /* ---------- persistence ---------- */
@@ -225,18 +305,20 @@ function savePerson(name){
 }
 
 async function loadData(){
-  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}, {data: activity}, {data: shortcuts}] = await Promise.all([
+  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}, {data: activity}, {data: shortcuts}, {data: people}] = await Promise.all([
     sb.from('items').select('*').order('name'),
     sb.from('extras').select('*').order('created_at'),
     sb.from('barcodes').select('*'),
     sb.from('activity').select('*').order('created_at', {ascending:false}).limit(15),
-    sb.from('shortcuts').select('*').order('name')
+    sb.from('shortcuts').select('*').order('name'),
+    sb.from('people').select('*').order('sort_order')
   ]);
   if(e1 || e2) throw (e1 || e2);
   DATA.items = items || [];
   DATA.extras = extras || [];
   DATA.activity = activity || [];
   DATA.shortcuts = shortcuts || [];
+  DATA.people = people || [];
   BARCODES = {};
   (barcodes||[]).forEach(b => BARCODES[b.barcode] = b);
 }
@@ -246,13 +328,15 @@ async function logActivity(action, detail){
 
 async function init(){
   ME = loadPerson();
-  applyPersonTheme();
+  theme = loadTheme();
+  applyTheme();
   try{
     await loadData();
     connError = false;
   }catch(e){
     connError = true;
   }
+  applyPersonTheme();
   render();
   subscribeRealtime();
 }
@@ -263,10 +347,11 @@ function subscribeRealtime(){
     .on('postgres_changes', {event:'*', schema:'public', table:'extras'}, () => reloadQuiet())
     .on('postgres_changes', {event:'*', schema:'public', table:'activity'}, () => reloadQuiet())
     .on('postgres_changes', {event:'*', schema:'public', table:'shortcuts'}, () => reloadQuiet())
+    .on('postgres_changes', {event:'*', schema:'public', table:'people'}, () => reloadQuiet())
     .subscribe();
 }
 async function reloadQuiet(){
-  try{ await loadData(); connError = false; render(); }catch(e){ /* keep last good state */ }
+  try{ await loadData(); connError = false; applyPersonTheme(); render(); }catch(e){ /* keep last good state */ }
 }
 
 function setPerson(name){
@@ -344,6 +429,46 @@ async function removeShortcut(id){
   render();
 }
 
+/* ---------- admin: people ---------- */
+
+async function addPerson(name){
+  if(!name.trim()) return;
+  try{
+    const startHex = hslToHex(Math.floor(Math.random()*360), 35, 40);
+    const {data} = await sb.from('people').insert({name: name.trim(), color: startHex, sort_order: DATA.people.length + 1}).select();
+    await loadData();
+    if(data && data[0]) { editingPersonId = data[0].id; adminColorDraft = {personId: data[0].id, ...hexToHsl(data[0].color)}; }
+  }catch(e){ showToast('No s\'ha pogut crear el perfil.'); }
+  addingPerson = false;
+  render();
+}
+async function renamePerson(id, name){
+  if(!name.trim()) return;
+  try{ await sb.from('people').update({name: name.trim()}).eq('id', id); await loadData(); }catch(e){}
+  render();
+}
+async function deletePerson(id){
+  try{ await sb.from('people').delete().eq('id', id); await loadData(); }catch(e){}
+  if(editingPersonId === id){ editingPersonId = null; adminColorDraft = null; }
+  render();
+}
+async function commitPersonColor(){
+  if(!adminColorDraft) return;
+  const hex = hslToHex(adminColorDraft.h, adminColorDraft.s, adminColorDraft.l);
+  const p = DATA.people.find(p => p.id === adminColorDraft.personId);
+  try{ await sb.from('people').update({color: hex}).eq('id', adminColorDraft.personId); await loadData(); }catch(e){}
+  if(p && p.name === ME) applyPersonTheme();
+  render();
+}
+function updateSliderPreview(){
+  if(!adminColorDraft) return;
+  const hex = hslToHex(adminColorDraft.h, adminColorDraft.s, adminColorDraft.l);
+  const swatch = document.getElementById('sliderSwatch');
+  const hexLabel = document.getElementById('sliderHex');
+  if(swatch) swatch.style.background = hex;
+  if(hexLabel) hexLabel.textContent = hex.toUpperCase();
+}
+
 /* ---------- helpers ---------- */
 
 function daysUntil(dateStr){
@@ -352,11 +477,24 @@ function daysUntil(dateStr){
   const today = new Date(); today.setHours(0,0,0,0);
   return Math.round((d - today) / 86400000);
 }
-function expiryLabel(days){
-  if(days < 0) return `caducat fa ${Math.abs(days)}d`;
-  if(days === 0) return 'caduca avui';
-  if(days === 1) return 'caduca demà';
-  return `caduca en ${days}d`;
+function addDays(dateStr, days){
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0,10);
+}
+function effectiveExpiry(item){
+  const dates = [];
+  if(item.expiry_date) dates.push(item.expiry_date);
+  if(item.opened_date && item.shelf_life_days) dates.push(addDays(item.opened_date, item.shelf_life_days));
+  if(dates.length === 0) return null;
+  return dates.sort()[0];
+}
+function expiryLabel(days, type){
+  const verb = type === 'consum_preferent' ? 'consum pref.' : 'caduca';
+  if(days < 0) return type==='consum_preferent' ? `consum pref. fa ${Math.abs(days)}d` : `caducat fa ${Math.abs(days)}d`;
+  if(days === 0) return `${verb} avui`;
+  if(days === 1) return type==='consum_preferent' ? 'consum pref. demà' : 'caduca demà';
+  return `${verb} en ${days}d`;
 }
 function timeAgo(ts){
   if(!ts) return '';
@@ -402,8 +540,8 @@ function render(){
   const term = searchTerm.trim().toLowerCase();
   const lowStock = DATA.items.filter(i => i.min_threshold > 0 && i.quantity <= i.min_threshold);
   const expiringSoon = DATA.items
-    .filter(i => i.expiry_date && daysUntil(i.expiry_date) <= EXPIRY_WARN_DAYS)
-    .sort((a,b) => daysUntil(a.expiry_date) - daysUntil(b.expiry_date));
+    .filter(i => effectiveExpiry(i) && daysUntil(effectiveExpiry(i)) <= EXPIRY_WARN_DAYS)
+    .sort((a,b) => daysUntil(effectiveExpiry(a)) - daysUntil(effectiveExpiry(b)));
 
   root.innerHTML = `
     ${connError ? `<div class="banner">No es pot connectar amb el servidor ara mateix.</div>` : ''}
@@ -414,6 +552,8 @@ function render(){
           <h1 class="h-title">Rebost</h1>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
+          <button class="icon-btn" id="themeBtn" title="Canvia el tema">${theme==='dark' ? '☀' : '☾'}</button>
+          <button class="icon-btn" id="adminBtn" title="Opcions avançades">⚙</button>
           <div class="person-pill">
           <button class="person-btn" id="personBtn">
             <span class="dot" style="background:${personColor(ME)}"></span>
@@ -421,7 +561,7 @@ function render(){
           </button>
           ${personMenuOpen ? `
             <div class="person-menu">
-              ${PEOPLE.map(p => `
+              ${DATA.people.map(p => `
                 <button data-person="${esc(p.name)}">
                   <span class="dot" style="background:${p.color}"></span>${esc(p.name)}
                 </button>`).join('')}
@@ -445,7 +585,7 @@ function render(){
               : expiringSoon.map(i => `
                   <div class="buy-row">
                     <span class="buy-name" data-edit="${i.id}">${esc(i.name)}</span>
-                    <span class="buy-tag ${daysUntil(i.expiry_date)>=0?'warn':''}">${expiryLabel(daysUntil(i.expiry_date))}</span>
+                    <span class="buy-tag ${daysUntil(effectiveExpiry(i))>=0?'warn':''}">${expiryLabel(daysUntil(effectiveExpiry(i)), i.expiry_type)}</span>
                   </div>`).join('')}
           </div>
 
@@ -499,8 +639,10 @@ function render(){
     ${modalOpen ? renderModal() : ''}
     ${scannerOpen ? renderScanner() : ''}
     ${reconcileItem ? renderReconcile() : ''}
+    ${adminScreen === 'password' ? renderAdminPassword() : ''}
+    ${adminScreen === 'panel' ? renderAdminPanel() : ''}
     ${quickAddOpen ? renderQuickAdd() : ''}
-    ${!modalOpen && !scannerOpen && !quickAddOpen && !reconcileItem ? `<button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>` : ''}
+    ${!modalOpen && !scannerOpen && !quickAddOpen && !reconcileItem && !adminScreen ? `<button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>` : ''}
     ${toastMsg ? `<div class="toast">${esc(toastMsg)}</div>` : ''}
   `;
 
@@ -532,19 +674,22 @@ function renderShelf(cat, term){
 
 function renderItemRow(i){
   const low = i.min_threshold > 0 && i.quantity <= i.min_threshold;
-  const days = i.expiry_date ? daysUntil(i.expiry_date) : null;
+  const eff = effectiveExpiry(i);
+  const days = eff ? daysUntil(eff) : null;
   const expiringSoon = days !== null && days <= EXPIRY_WARN_DAYS;
 
   let subLine, subClass = '';
   if(low){ subLine = `per sota del mínim (${i.min_threshold})`; subClass = 'low'; }
-  else if(expiringSoon){ subLine = expiryLabel(days); subClass = days < 0 ? 'low' : 'warn'; }
+  else if(expiringSoon){ subLine = expiryLabel(days, i.expiry_type); subClass = days < 0 ? 'low' : 'warn'; }
   else { subLine = `${esc(i.updated_by||'')} · ${timeAgo(i.updated_at)}`; }
+
+  const nameLine = i.brand ? `${esc(i.name)} <span class="item-brand">${esc(i.brand)}</span>` : esc(i.name);
 
   return `
     <div class="item-row" data-edit="${i.id}">
       <span class="dot" style="background:${personColor(i.updated_by)}" title="${esc(i.updated_by||'')}"></span>
       <div class="item-main">
-        <div class="item-name">${esc(i.name)}</div>
+        <div class="item-name">${nameLine}</div>
         <div class="item-sub ${subClass}">${subLine}</div>
       </div>
       <div class="qty">${i.quantity}${esc(i.unit||'')}</div>
@@ -577,6 +722,10 @@ function renderModal(){
             <input type="text" id="f-name" value="${esc(d.name)}" required autocomplete="off">
           </div>
           <div class="field">
+            <label>Marca</label>
+            <input type="text" id="f-brand" value="${esc(d.brand)}" placeholder="opcional" autocomplete="off">
+          </div>
+          <div class="field">
             <label>Categoria</label>
             <select id="f-cat">
               ${CATS.map(c=>`<option value="${c}" ${c===d.category?'selected':''}>${c}</option>`).join('')}
@@ -592,15 +741,34 @@ function renderModal(){
               <input type="text" id="f-unit" value="${esc(d.unit)}" placeholder="uds, kg, L…">
             </div>
           </div>
+          <div class="field">
+            <label>Reposar quan arribi a</label>
+            <input type="number" step="any" id="f-min" value="${d.minThreshold}">
+          </div>
+          <div class="field">
+            <label>Tipus de data</label>
+            <div class="expiry-type-row">
+              <label class="radio-pill"><input type="radio" name="expiryType" value="caducitat" ${d.expiryType==='caducitat'?'checked':''}> Caducitat</label>
+              <label class="radio-pill"><input type="radio" name="expiryType" value="consum_preferent" ${d.expiryType==='consum_preferent'?'checked':''}> Consum preferent</label>
+            </div>
+          </div>
+          <div class="field">
+            <label>Data</label>
+            <input type="date" id="f-expiry" value="${esc(d.expiryDate)}">
+          </div>
           <div class="field-row">
             <div class="field">
-              <label>Reposar quan arribi a</label>
-              <input type="number" step="any" id="f-min" value="${d.minThreshold}">
+              <label>Obert el dia</label>
+              <input type="date" id="f-opened" value="${esc(d.openedDate)}">
             </div>
             <div class="field">
-              <label>Caducitat</label>
-              <input type="date" id="f-expiry" value="${esc(d.expiryDate)}">
+              <label>Dura un cop obert (dies)</label>
+              <input type="number" step="1" min="0" id="f-shelflife" value="${esc(d.shelfLifeDays)}" placeholder="opcional">
             </div>
+          </div>
+          <div class="field">
+            <label>Observacions</label>
+            <textarea id="f-notes" placeholder="p. ex. paquet de 6, cada unitat és 250 ml…" rows="2">${esc(d.notes)}</textarea>
           </div>
           <div class="modal-actions">
             ${!isNew ? `<button type="button" class="btn-delete" id="deleteBtn">Elimina</button>` : `<span></span>`}
@@ -746,6 +914,10 @@ function restoreSearchFocus(){
 
 function bindEvents(){
   const personBtn = document.getElementById('personBtn');
+  const themeBtn = document.getElementById('themeBtn');
+  if(themeBtn) themeBtn.onclick = toggleTheme;
+  const adminBtn = document.getElementById('adminBtn');
+  if(adminBtn) adminBtn.onclick = () => { adminScreen = adminUnlocked ? 'panel' : 'password'; adminPassError = false; render(); };
   if(personBtn) personBtn.onclick = () => { personMenuOpen = !personMenuOpen; render(); };
   root.querySelectorAll('[data-person]').forEach(b => {
     b.onclick = () => { personMenuOpen = false; setPerson(b.dataset.person); };
@@ -762,7 +934,7 @@ function bindEvents(){
 
   root.querySelectorAll('[data-newcat]').forEach(b => {
     b.onclick = () => {
-      modalDraft = {name:'', category:b.dataset.newcat, quantity:1, unit:'', minThreshold:1, expiryDate:'', barcode:''};
+      modalDraft = {name:'', category:b.dataset.newcat, quantity:1, unit:'', minThreshold:0, expiryDate:'', barcode:'', brand:'', notes:'', openedDate:'', shelfLifeDays:'', expiryType:'caducitat'};
       modalEditId = null; modalOpen = true; render();
     };
   });
@@ -772,7 +944,7 @@ function bindEvents(){
       const id = el.dataset.edit;
       const it = DATA.items.find(i=>i.id===id);
       if(it){
-        modalDraft = {name:it.name, category:it.category, quantity:it.quantity, unit:it.unit||'', minThreshold:it.min_threshold, expiryDate:it.expiry_date||'', barcode:it.barcode||''};
+        modalDraft = {name:it.name, category:it.category, quantity:it.quantity, unit:it.unit||'', minThreshold:it.min_threshold, expiryDate:it.expiry_date||'', barcode:it.barcode||'', brand:it.brand||'', notes:it.notes||'', openedDate:it.opened_date||'', shelfLifeDays:it.shelf_life_days||'', expiryType:it.expiry_type||'caducitat'};
         modalEditId = id; modalOpen = true; render();
       }
     };
@@ -852,7 +1024,7 @@ function bindEvents(){
   const deleteBtn = document.getElementById('deleteBtn');
   if(deleteBtn) deleteBtn.onclick = () => { const id = modalEditId; closeModal(); deleteItem(id); };
 
-  ['f-name','f-cat','f-qty','f-unit','f-min','f-expiry','f-barcode'].forEach(id => {
+  ['f-name','f-cat','f-qty','f-unit','f-min','f-expiry','f-barcode','f-brand','f-notes','f-opened','f-shelflife'].forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     const handler = (e) => {
@@ -863,9 +1035,16 @@ function bindEvents(){
       else if(id==='f-min') modalDraft.minThreshold = parseFloat(e.target.value) || 0;
       else if(id==='f-expiry') modalDraft.expiryDate = e.target.value;
       else if(id==='f-barcode') modalDraft.barcode = e.target.value;
+      else if(id==='f-brand') modalDraft.brand = e.target.value;
+      else if(id==='f-notes') modalDraft.notes = e.target.value;
+      else if(id==='f-opened') modalDraft.openedDate = e.target.value;
+      else if(id==='f-shelflife') modalDraft.shelfLifeDays = e.target.value;
     };
     el.addEventListener('input', handler);
     el.addEventListener('change', handler);
+  });
+  root.querySelectorAll('input[name="expiryType"]').forEach(el => {
+    el.addEventListener('change', (e) => { modalDraft.expiryType = e.target.value; });
   });
 
   const scanBtn = document.getElementById('scanBtn');
@@ -883,9 +1062,13 @@ function bindEvents(){
       min_threshold: modalDraft.minThreshold,
       expiry_date: modalDraft.expiryDate || null,
       barcode: modalDraft.barcode.trim() || null,
+      brand: modalDraft.brand.trim() || null,
+      notes: modalDraft.notes.trim() || null,
+      opened_date: modalDraft.openedDate || null,
+      shelf_life_days: modalDraft.shelfLifeDays ? parseInt(modalDraft.shelfLifeDays, 10) : null,
+      expiry_type: modalDraft.expiryType || 'caducitat',
     };
     const existingId = modalEditId;
-    const wasOpen = true;
     modalOpen = false;
     saveItem(fields, existingId);
   };
@@ -897,9 +1080,160 @@ function bindEvents(){
     const v = document.getElementById('scanManualInput').value.trim();
     if(v) applyScannedCode(v);
   };
+
+  /* ---- admin: password gate ---- */
+  const adminPassOverlay = document.getElementById('adminPassOverlay');
+  if(adminPassOverlay) adminPassOverlay.onclick = (e) => { if(e.target.id === 'adminPassOverlay'){ adminScreen = null; render(); } };
+  const adminPassCancelBtn = document.getElementById('adminPassCancelBtn');
+  if(adminPassCancelBtn) adminPassCancelBtn.onclick = () => { adminScreen = null; render(); };
+  const adminPassForm = document.getElementById('adminPassForm');
+  if(adminPassForm) adminPassForm.onsubmit = (e) => {
+    e.preventDefault();
+    const val = document.getElementById('adminPassInput').value;
+    if(val === ADMIN_PASSWORD){ adminUnlocked = true; adminScreen = 'panel'; adminPassError = false; }
+    else { adminPassError = true; }
+    render();
+  };
+
+  /* ---- admin: panel ---- */
+  const adminOverlay = document.getElementById('adminOverlay');
+  if(adminOverlay) adminOverlay.onclick = (e) => { if(e.target.id === 'adminOverlay'){ adminScreen = null; editingPersonId = null; adminColorDraft = null; render(); } };
+  const adminCloseBtn = document.getElementById('adminCloseBtn');
+  if(adminCloseBtn) adminCloseBtn.onclick = () => { adminScreen = null; editingPersonId = null; adminColorDraft = null; render(); };
+
+  const addPersonBtn = document.getElementById('addPersonBtn');
+  if(addPersonBtn) addPersonBtn.onclick = () => { addingPerson = true; render(); };
+  const cancelAddPersonBtn = document.getElementById('cancelAddPersonBtn');
+  if(cancelAddPersonBtn) cancelAddPersonBtn.onclick = () => { addingPerson = false; render(); };
+  const addPersonForm = document.getElementById('addPersonForm');
+  if(addPersonForm) addPersonForm.onsubmit = (e) => {
+    e.preventDefault();
+    addPerson(document.getElementById('newPersonName').value);
+  };
+
+  root.querySelectorAll('[data-editperson]').forEach(b => {
+    b.onclick = () => {
+      const id = b.dataset.editperson;
+      if(editingPersonId === id){ editingPersonId = null; adminColorDraft = null; }
+      else { editingPersonId = id; adminColorDraft = null; }
+      render();
+    };
+  });
+  root.querySelectorAll('[data-delperson]').forEach(b => {
+    b.onclick = () => { if(DATA.people.length <= 1){ showToast('Ha de quedar almenys un perfil.'); return; } deletePerson(b.dataset.delperson); };
+  });
+  root.querySelectorAll('[data-personname]').forEach(el => {
+    el.addEventListener('change', (e) => renamePerson(el.dataset.personname, e.target.value));
+  });
+  root.querySelectorAll('[data-rmshortcut-admin]').forEach(b => {
+    b.onclick = () => removeShortcut(b.dataset.rmshortcutAdmin);
+  });
+
+  root.querySelectorAll('[data-hue],[data-sat],[data-light]').forEach(el => {
+    el.addEventListener('input', () => {
+      if(!adminColorDraft) return;
+      if(el.dataset.hue !== undefined) adminColorDraft.h = parseInt(el.value, 10);
+      if(el.dataset.sat !== undefined) adminColorDraft.s = parseInt(el.value, 10);
+      if(el.dataset.light !== undefined) adminColorDraft.l = parseInt(el.value, 10);
+      updateSliderPreview();
+    });
+    el.addEventListener('change', () => commitPersonColor());
+  });
 }
 
 function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; render(); }
+
+function renderAdminPassword(){
+  return `
+    <div class="overlay" id="adminPassOverlay">
+      <div class="modal quick-modal">
+        <h3>Opcions avançades</h3>
+        <form id="adminPassForm">
+          <div class="field">
+            <label>Contrasenya</label>
+            <input type="password" id="adminPassInput" autocomplete="off" autofocus>
+          </div>
+          ${adminPassError ? `<p style="color:var(--brick);font-size:12px;margin:-6px 0 10px;">Contrasenya incorrecta.</p>` : ''}
+          <div class="modal-actions">
+            <button type="button" class="btn-ghost" id="adminPassCancelBtn">Cancel·la</button>
+            <button type="submit" class="btn-primary">Entra</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminPanel(){
+  return `
+    <div class="overlay" id="adminOverlay">
+      <div class="modal" style="max-width:440px;">
+        <h3>Opcions avançades</h3>
+        <p class="admin-section-title">Perfils de casa</p>
+        ${DATA.people.map(p => renderAdminPersonRow(p)).join('')}
+        ${addingPerson ? `
+          <form id="addPersonForm" class="admin-add-row">
+            <input type="text" id="newPersonName" placeholder="Nom del nou perfil" autocomplete="off" autofocus>
+            <button type="submit" class="btn-primary" style="padding:8px 14px;">Crea</button>
+            <button type="button" class="btn-ghost" id="cancelAddPersonBtn">Cancel·la</button>
+          </form>
+        ` : `<button type="button" class="side-action" id="addPersonBtn" style="margin-top:8px;">+ Nou perfil</button>`}
+
+        <p class="admin-section-title" style="margin-top:20px;">Dreceres de compra</p>
+        <div class="shortcut-chips">
+          ${DATA.shortcuts.map(s => `<span class="chip">${esc(s.name)}<button type="button" class="chip-x" data-rmshortcut-admin="${s.id}">✕</button></span>`).join('') || `<span class="side-empty">Cap encara.</span>`}
+        </div>
+
+        <div class="modal-actions" style="margin-top:22px;">
+          <button type="button" class="btn-ghost" id="adminCloseBtn">Tanca</button>
+          <span></span>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderAdminPersonRow(p){
+  const isEditing = editingPersonId === p.id;
+  return `
+    <div class="admin-person-row">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <span class="dot" style="background:${p.color};width:16px;height:16px;"></span>
+        ${isEditing
+          ? `<input type="text" class="admin-name-input" data-personname="${p.id}" value="${esc(p.name)}">`
+          : `<span style="flex:1;font-size:14px;">${esc(p.name)}</span>`}
+        <button type="button" class="side-action" data-editperson="${p.id}">${isEditing ? 'fet' : 'edita'}</button>
+        <button type="button" class="side-action" data-delperson="${p.id}" style="color:var(--brick);">elimina</button>
+      </div>
+      ${isEditing ? renderColorSliders(p) : ''}
+    </div>
+  `;
+}
+
+function renderColorSliders(p){
+  const d = adminColorDraft && adminColorDraft.personId === p.id ? adminColorDraft : {personId: p.id, ...hexToHsl(p.color)};
+  adminColorDraft = d;
+  return `
+    <div class="slider-panel">
+      <div class="slider-row">
+        <label>To</label>
+        <input type="range" min="0" max="360" value="${d.h}" data-hue="${p.id}" class="slider slider-hue">
+      </div>
+      <div class="slider-row">
+        <label>Saturació</label>
+        <input type="range" min="0" max="100" value="${d.s}" data-sat="${p.id}" class="slider">
+      </div>
+      <div class="slider-row">
+        <label>Lluminositat</label>
+        <input type="range" min="10" max="85" value="${d.l}" data-light="${p.id}" class="slider">
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:8px;">
+        <span id="sliderSwatch" style="width:28px;height:28px;border-radius:50%;background:${p.color};border:1px solid var(--line);"></span>
+        <span id="sliderHex" style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--ink-soft);">${p.color.toUpperCase()}</span>
+      </div>
+    </div>
+  `;
+}
 
 function renderPicker(){
   root.innerHTML = `
@@ -909,7 +1243,7 @@ function renderPicker(){
         <h1 class="h-title">Qui ets?</h1>
         <p class="picker-sub">Perquè sapiguem qui ha tocat què.</p>
         <div class="picker-list">
-          ${PEOPLE.map(p => `
+          ${DATA.people.map(p => `
             <button data-pick="${esc(p.name)}">
               <span class="dot" style="background:${p.color}"></span>${esc(p.name)}
             </button>`).join('')}
