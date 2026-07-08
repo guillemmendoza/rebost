@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Rebost</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#4B5842">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Rebost">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@zxing/library@0.21.3/umd/index.min.js"></script>
 <style>
@@ -96,6 +102,16 @@ input,select{font-family:inherit;}
 .extra-form{display:flex;gap:6px;margin-top:8px;}
 .extra-form input{flex:1;border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:13px;background:var(--bg);}
 .extra-form button{border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:4px;padding:6px 10px;font-size:12px;}
+.activity-row{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;}
+.activity-row:last-child{border-bottom:none;}
+.activity-text{flex:1;color:var(--ink-soft);line-height:1.4;}
+.activity-text b{color:var(--ink);font-weight:500;}
+.activity-time{color:var(--ink-faint);font-size:10px;white-space:nowrap;font-family:'IBM Plex Mono',monospace;}
+.shortcut-chips{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0;}
+.chip{background:var(--surface-2);border:1px solid var(--line);border-radius:16px;padding:6px 12px;font-size:12px;color:var(--ink);position:relative;}
+.chip:hover{border-color:var(--ink);}
+.chip-x{background:var(--brick);color:#fff;border:none;border-radius:50%;width:15px;height:15px;font-size:9px;line-height:1;margin-left:6px;display:inline-flex;align-items:center;justify-content:center;}
+.manage-link{font-size:11px;color:var(--ink-faint);border:none;background:none;text-decoration:underline;padding:0;margin-bottom:4px;}
 
 /* modal */
 .overlay{position:fixed;inset:0;background:rgba(47,44,37,.35);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;}
@@ -157,7 +173,7 @@ const PEOPLE = [
 ];
 const EXPIRY_WARN_DAYS = 5;
 
-let DATA = {items:[], extras:[]};
+let DATA = {items:[], extras:[], activity:[], shortcuts:[]};
 let BARCODES = {};
 let ME = null;
 let modalOpen = false;
@@ -167,6 +183,8 @@ let personMenuOpen = false;
 let searchTerm = '';
 let scannerOpen = false;
 let quickAddOpen = false;
+let reconcileItem = null;
+let manageShortcuts = false;
 let connError = false;
 let toastMsg = null;
 let toastTimer = null;
@@ -185,16 +203,23 @@ function savePerson(name){
 }
 
 async function loadData(){
-  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}] = await Promise.all([
+  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}, {data: activity}, {data: shortcuts}] = await Promise.all([
     sb.from('items').select('*').order('name'),
     sb.from('extras').select('*').order('created_at'),
-    sb.from('barcodes').select('*')
+    sb.from('barcodes').select('*'),
+    sb.from('activity').select('*').order('created_at', {ascending:false}).limit(15),
+    sb.from('shortcuts').select('*').order('name')
   ]);
   if(e1 || e2) throw (e1 || e2);
   DATA.items = items || [];
   DATA.extras = extras || [];
+  DATA.activity = activity || [];
+  DATA.shortcuts = shortcuts || [];
   BARCODES = {};
   (barcodes||[]).forEach(b => BARCODES[b.barcode] = b);
+}
+async function logActivity(action, detail){
+  try{ await sb.from('activity').insert({actor: ME, action, detail}); }catch(e){}
 }
 
 async function init(){
@@ -213,6 +238,8 @@ function subscribeRealtime(){
   sb.channel('rebost-live')
     .on('postgres_changes', {event:'*', schema:'public', table:'items'}, () => reloadQuiet())
     .on('postgres_changes', {event:'*', schema:'public', table:'extras'}, () => reloadQuiet())
+    .on('postgres_changes', {event:'*', schema:'public', table:'activity'}, () => reloadQuiet())
+    .on('postgres_changes', {event:'*', schema:'public', table:'shortcuts'}, () => reloadQuiet())
     .subscribe();
 }
 async function reloadQuiet(){
@@ -231,8 +258,10 @@ async function saveItem(fields, existingId){
   try{
     if(existingId){
       await sb.from('items').update({...fields, updated_by: ME, updated_at: new Date().toISOString()}).eq('id', existingId);
+      logActivity('edita', `${fields.name} (${fields.quantity}${fields.unit||''})`);
     }else{
       await sb.from('items').insert({...fields, updated_by: ME, updated_at: new Date().toISOString()});
+      logActivity('afegeix article', fields.name);
     }
     if(fields.barcode){
       await sb.from('barcodes').upsert({barcode: fields.barcode, name: fields.name, category: fields.category, unit: fields.unit});
@@ -242,7 +271,8 @@ async function saveItem(fields, existingId){
   render();
 }
 async function deleteItem(id){
-  try{ await sb.from('items').delete().eq('id', id); await loadData(); connError = false; }
+  const it = DATA.items.find(i=>i.id===id);
+  try{ await sb.from('items').delete().eq('id', id); if(it) logActivity('elimina', it.name); await loadData(); connError = false; }
   catch(e){ connError = true; }
   render();
 }
@@ -251,18 +281,42 @@ async function stepQty(id, delta){
   if(!it) return;
   const newQty = Math.max(0, Math.round((it.quantity + delta) * 100) / 100);
   it.quantity = newQty; render(); // optimistic
-  try{ await sb.from('items').update({quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()}).eq('id', id); }
+  try{
+    await sb.from('items').update({quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()}).eq('id', id);
+    logActivity(delta > 0 ? 'suma' : 'resta', `${it.name} → ${newQty}${it.unit||''}`);
+  }
   catch(e){ connError = true; render(); }
+}
+async function reconcileQty(id, addAmount){
+  const it = DATA.items.find(i=>i.id===id);
+  if(!it) return;
+  const newQty = Math.round((it.quantity + addAmount) * 100) / 100;
+  try{
+    await sb.from('items').update({quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()}).eq('id', id);
+    logActivity('compra reposada', `${it.name} +${addAmount}${it.unit||''} → ${newQty}${it.unit||''}`);
+    await loadData(); connError = false;
+  }catch(e){ connError = true; }
+  render();
 }
 async function addExtra(name){
   if(!name.trim()) return;
-  try{ await sb.from('extras').insert({name:name.trim(), added_by:ME}); await loadData(); connError=false; }
+  try{ await sb.from('extras').insert({name:name.trim(), added_by:ME}); logActivity('afegeix a la llista', name.trim()); await loadData(); connError=false; }
   catch(e){ connError = true; }
   render();
 }
 async function removeExtra(id){
-  try{ await sb.from('extras').delete().eq('id', id); await loadData(); connError=false; }
+  const ex = DATA.extras.find(e=>e.id===id);
+  try{ await sb.from('extras').delete().eq('id', id); if(ex) logActivity('comprat', ex.name); await loadData(); connError=false; }
   catch(e){ connError = true; }
+  render();
+}
+async function addShortcut(name){
+  if(!name.trim()) return;
+  try{ await sb.from('shortcuts').insert({name:name.trim()}); await loadData(); }catch(e){}
+  render();
+}
+async function removeShortcut(id){
+  try{ await sb.from('shortcuts').delete().eq('id', id); await loadData(); }catch(e){}
   render();
 }
 
@@ -368,7 +422,10 @@ function render(){
               : lowStock.map(i => `
                   <div class="buy-row">
                     <span class="buy-name" data-edit="${i.id}">${esc(i.name)}</span>
-                    <span class="buy-tag">${i.quantity}${esc(i.unit||'')} / mín ${i.min_threshold}</span>
+                    <span style="display:flex;align-items:center;gap:8px;">
+                      <span class="buy-tag">${i.quantity}${esc(i.unit||'')} / mín ${i.min_threshold}</span>
+                      <button class="side-action" data-reconcile="${i.id}">Comprat</button>
+                    </span>
                   </div>`).join('')}
           </div>
 
@@ -397,13 +454,26 @@ function render(){
               <button type="submit">Afegeix</button>
             </form>
           </div>
+
+          <div class="side-block">
+            <p class="side-title">Activitat recent</p>
+            ${DATA.activity.length === 0
+              ? `<p class="side-empty">Res encara.</p>`
+              : DATA.activity.map(a => `
+                  <div class="activity-row">
+                    <span class="dot" style="background:${personColor(a.actor)}"></span>
+                    <span class="activity-text"><b>${esc(a.actor||'algú')}</b> ${esc(a.action)}: ${esc(a.detail)}</span>
+                    <span class="activity-time">${timeAgo(a.created_at)}</span>
+                  </div>`).join('')}
+          </div>
         </div>
       </div>
     </div>
     ${modalOpen ? renderModal() : ''}
     ${scannerOpen ? renderScanner() : ''}
+    ${reconcileItem ? renderReconcile() : ''}
     ${quickAddOpen ? renderQuickAdd() : ''}
-    ${!modalOpen && !scannerOpen && !quickAddOpen ? `<button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>` : ''}
+    ${!modalOpen && !scannerOpen && !quickAddOpen && !reconcileItem ? `<button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>` : ''}
     ${toastMsg ? `<div class="toast">${esc(toastMsg)}</div>` : ''}
   `;
 
@@ -518,13 +588,48 @@ function renderModal(){
   `;
 }
 
+function renderReconcile(){
+  const it = DATA.items.find(i=>i.id===reconcileItem);
+  if(!it) return '';
+  const suggested = Math.max(1, it.min_threshold - it.quantity) || 1;
+  return `
+    <div class="overlay" id="reconcileOverlay">
+      <div class="modal quick-modal">
+        <h3>Comprat: ${esc(it.name)}</h3>
+        <form id="reconcileForm">
+          <div class="field">
+            <label>Quantitat comprada (${esc(it.unit||'uds')})</label>
+            <input type="number" step="any" id="reconcileQty" value="${suggested}" autofocus>
+          </div>
+          <div class="modal-actions">
+            <button type="button" class="btn-ghost" id="reconcileCancelBtn">Cancel·la</button>
+            <button type="submit" class="btn-primary">Actualitza estoc</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
 function renderQuickAdd(){
   return `
     <div class="overlay" id="quickOverlay">
       <div class="modal quick-modal">
         <h3>Apunta per comprar</h3>
+        ${DATA.shortcuts.length ? `
+          <button type="button" class="manage-link" id="manageShortcutsBtn">${manageShortcuts ? 'fet' : 'gestiona les dreceres'}</button>
+          <div class="shortcut-chips">
+            ${DATA.shortcuts.map(s => manageShortcuts
+              ? `<span class="chip">${esc(s.name)}<button type="button" class="chip-x" data-rmshortcut="${s.id}">✕</button></span>`
+              : `<button type="button" class="chip" data-chip="${esc(s.name)}">${esc(s.name)}</button>`
+            ).join('')}
+          </div>` : ''}
         <form id="quickAddForm">
           <input type="text" id="quickAddInput" placeholder="Què cal comprar?" autocomplete="off">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-soft);margin-top:10px;">
+            <input type="checkbox" id="saveShortcutCheck" style="width:auto;">
+            desa'l com a drecera habitual
+          </label>
           <div class="modal-actions">
             <button type="button" class="btn-ghost" id="quickCancelBtn">Cancel·la</button>
             <button type="submit" class="btn-primary">Afegeix</button>
@@ -669,15 +774,41 @@ function bindEvents(){
   if(fabBtn) fabBtn.onclick = () => { quickAddOpen = true; render(); };
 
   const quickOverlay = document.getElementById('quickOverlay');
-  if(quickOverlay) quickOverlay.onclick = (e) => { if(e.target.id === 'quickOverlay'){ quickAddOpen = false; render(); } };
+  if(quickOverlay) quickOverlay.onclick = (e) => { if(e.target.id === 'quickOverlay'){ quickAddOpen = false; manageShortcuts = false; render(); } };
   const quickCancelBtn = document.getElementById('quickCancelBtn');
-  if(quickCancelBtn) quickCancelBtn.onclick = () => { quickAddOpen = false; render(); };
+  if(quickCancelBtn) quickCancelBtn.onclick = () => { quickAddOpen = false; manageShortcuts = false; render(); };
   const quickAddForm = document.getElementById('quickAddForm');
   if(quickAddForm) quickAddForm.onsubmit = (e) => {
     e.preventDefault();
     const val = document.getElementById('quickAddInput').value;
-    quickAddOpen = false;
+    const saveAsShortcut = document.getElementById('saveShortcutCheck').checked;
+    quickAddOpen = false; manageShortcuts = false;
     addExtra(val);
+    if(saveAsShortcut) addShortcut(val);
+  };
+  root.querySelectorAll('[data-chip]').forEach(b => {
+    b.onclick = () => { quickAddOpen = false; addExtra(b.dataset.chip); showToast('Afegit a la llista.'); };
+  });
+  const manageShortcutsBtn = document.getElementById('manageShortcutsBtn');
+  if(manageShortcutsBtn) manageShortcutsBtn.onclick = () => { manageShortcuts = !manageShortcuts; render(); };
+  root.querySelectorAll('[data-rmshortcut]').forEach(b => {
+    b.onclick = () => removeShortcut(b.dataset.rmshortcut);
+  });
+
+  root.querySelectorAll('[data-reconcile]').forEach(b => {
+    b.onclick = () => { reconcileItem = b.dataset.reconcile; render(); };
+  });
+  const reconcileOverlay = document.getElementById('reconcileOverlay');
+  if(reconcileOverlay) reconcileOverlay.onclick = (e) => { if(e.target.id === 'reconcileOverlay'){ reconcileItem = null; render(); } };
+  const reconcileCancelBtn = document.getElementById('reconcileCancelBtn');
+  if(reconcileCancelBtn) reconcileCancelBtn.onclick = () => { reconcileItem = null; render(); };
+  const reconcileForm = document.getElementById('reconcileForm');
+  if(reconcileForm) reconcileForm.onsubmit = (e) => {
+    e.preventDefault();
+    const amount = parseFloat(document.getElementById('reconcileQty').value) || 0;
+    const id = reconcileItem;
+    reconcileItem = null;
+    if(amount > 0) reconcileQty(id, amount); else render();
   };
 
   const extraForm = document.getElementById('extraForm');
@@ -765,6 +896,11 @@ function renderPicker(){
 }
 
 init();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+}
+
 </script>
 </body>
 </html>
