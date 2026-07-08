@@ -29,6 +29,8 @@
   --brick:#9C4A3D;
   --accent:#2F6B4F;
   --accent-2:#C6862E;
+  --accent-hover:#255740;
+  --accent-soft:#E3F0EA;
   --radius:5px;
 }
 *{box-sizing:border-box;}
@@ -47,7 +49,7 @@ input,select{font-family:inherit;}
 .eyebrow{font-size:11px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin:0 0 2px;}
 .h-title{font-family:'Fraunces',serif;font-weight:600;font-size:32px;margin:0;}
 .person-pill{position:relative;}
-.person-btn{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:6px 12px 6px 8px;font-size:13px;color:var(--ink);}
+.person-btn{display:flex;align-items:center;gap:8px;background:var(--accent-soft);border:1px solid var(--accent);border-radius:20px;padding:6px 12px 6px 8px;font-size:13px;color:var(--ink);}
 .dot{width:9px;height:9px;border-radius:50%;flex:none;}
 .person-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 4px 14px rgba(47,44,37,.1);z-index:20;min-width:140px;overflow:hidden;}
 .person-menu button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:9px 12px;font-size:13px;text-align:left;color:var(--ink);}
@@ -61,7 +63,7 @@ input,select{font-family:inherit;}
 
 /* category shelf */
 .shelf{margin-bottom:30px;}
-.shelf-hdr{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:7px;margin-bottom:2px;}
+.shelf-hdr{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--accent);padding-bottom:7px;margin-bottom:2px;}
 .shelf-name{font-family:'Fraunces',serif;font-weight:600;font-size:18px;}
 .shelf-count{font-size:12px;color:var(--ink-faint);margin-left:8px;font-family:'IBM Plex Mono',monospace;}
 .shelf-add{background:none;border:none;font-size:12px;color:var(--ink-soft);border-bottom:1px solid var(--ink-faint);padding:0 0 1px;}
@@ -88,7 +90,7 @@ input,select{font-family:inherit;}
 /* sidebar */
 .side-block{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:18px;}
 .side-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
-.side-title{font-family:'Fraunces',serif;font-weight:600;font-size:15px;margin:0;}
+.side-title{font-family:'Fraunces',serif;font-weight:600;font-size:15px;margin:0;color:var(--accent);}
 .side-action{background:none;border:none;font-size:11px;color:var(--ink-soft);border-bottom:1px solid var(--ink-faint);padding:0;}
 .side-action:hover{color:var(--ink);border-color:var(--ink);}
 .side-empty{font-size:12px;color:var(--ink-faint);font-style:italic;}
@@ -130,7 +132,7 @@ input,select{font-family:inherit;}
 .scan-btn:hover{background:var(--line);}
 .modal-actions{display:flex;justify-content:space-between;align-items:center;margin-top:18px;}
 .btn-primary{background:var(--accent);color:#fff;border:1px solid var(--accent);border-radius:4px;padding:9px 16px;font-size:13px;}
-.btn-primary:hover{background:#255740;}
+.btn-primary:hover{background:var(--accent-hover);}
 .btn-ghost{background:none;border:none;color:var(--ink-soft);font-size:13px;}
 .btn-ghost:hover{color:var(--ink);}
 .btn-delete{background:none;border:none;color:var(--brick);font-size:12px;}
@@ -154,7 +156,7 @@ input,select{font-family:inherit;}
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:13px;padding:10px 18px;border-radius:20px;z-index:60;}
 
 .fab{position:fixed;bottom:22px;right:22px;background:var(--accent);color:#fff;border:none;border-radius:24px;padding:13px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 14px rgba(47,44,37,.25);z-index:40;display:flex;align-items:center;gap:7px;}
-.fab:hover{background:#255740;}
+.fab:hover{background:var(--accent-hover);}
 .fab-icon{font-size:16px;line-height:1;}
 .quick-modal{max-width:320px;}
 .quick-modal input{width:100%;border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-size:15px;background:var(--bg);color:var(--ink);}
@@ -170,10 +172,11 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const CATS = ['Nevera','Congelador','Rebost'];
 const PEOPLE = [
-  {name:'Guillem', color:'var(--olive)'},
-  {name:'Yoli', color:'var(--walnut)'},
-  {name:'Roger', color:'var(--ochre)'}
+  {name:'Guillem', color:'#4B5842'},
+  {name:'Yoli', color:'#7B5B3F'},
+  {name:'Roger', color:'#AD7C33'}
 ];
+const DEFAULT_ACCENT = '#2F6B4F';
 const EXPIRY_WARN_DAYS = 5;
 
 let DATA = {items:[], extras:[], activity:[], shortcuts:[]};
@@ -196,7 +199,23 @@ const root = document.getElementById('root');
 const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const personColor = (name) => (PEOPLE.find(p=>p.name===name)||{}).color || 'var(--ink-faint)';
 
+function shade(hex, amt){
+  const n = hex.replace('#','');
+  const r = Math.max(0, Math.min(255, parseInt(n.substring(0,2),16) + amt));
+  const g = Math.max(0, Math.min(255, parseInt(n.substring(2,4),16) + amt));
+  const b = Math.max(0, Math.min(255, parseInt(n.substring(4,6),16) + amt));
+  return '#' + [r,g,b].map(v => Math.round(v).toString(16).padStart(2,'0')).join('');
+}
+function applyPersonTheme(){
+  const base = personColor(ME);
+  const hex = (base && base.startsWith('#')) ? base : DEFAULT_ACCENT;
+  document.documentElement.style.setProperty('--accent', hex);
+  document.documentElement.style.setProperty('--accent-hover', shade(hex, -22));
+  document.documentElement.style.setProperty('--accent-soft', shade(hex, 150));
+}
+
 /* ---------- persistence ---------- */
+
 
 function loadPerson(){
   try{ return localStorage.getItem('rebost-me'); }catch(e){ return null; }
@@ -227,6 +246,7 @@ async function logActivity(action, detail){
 
 async function init(){
   ME = loadPerson();
+  applyPersonTheme();
   try{
     await loadData();
     connError = false;
@@ -252,6 +272,7 @@ async function reloadQuiet(){
 function setPerson(name){
   ME = name;
   savePerson(name);
+  applyPersonTheme();
   render();
 }
 
