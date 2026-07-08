@@ -131,6 +131,12 @@ input,select{font-family:inherit;}
 .loading{min-height:100vh;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--ink-faint);}
 
 .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:13px;padding:10px 18px;border-radius:20px;z-index:60;}
+
+.fab{position:fixed;bottom:22px;right:22px;background:var(--ink);color:var(--surface);border:none;border-radius:24px;padding:13px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 14px rgba(47,44,37,.25);z-index:40;display:flex;align-items:center;gap:7px;}
+.fab:hover{background:#413D33;}
+.fab-icon{font-size:16px;line-height:1;}
+.quick-modal{max-width:320px;}
+.quick-modal input{width:100%;border:1px solid var(--line);border-radius:4px;padding:10px 12px;font-size:15px;background:var(--bg);color:var(--ink);}
 </style>
 </head>
 <body>
@@ -158,6 +164,7 @@ let modalEditId = null;
 let personMenuOpen = false;
 let searchTerm = '';
 let scannerOpen = false;
+let quickAddOpen = false;
 let connError = false;
 let toastMsg = null;
 let toastTimer = null;
@@ -393,12 +400,18 @@ function render(){
     </div>
     ${modalOpen ? renderModal() : ''}
     ${scannerOpen ? renderScanner() : ''}
+    ${quickAddOpen ? renderQuickAdd() : ''}
+    ${!modalOpen && !scannerOpen && !quickAddOpen ? `<button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>` : ''}
     ${toastMsg ? `<div class="toast">${esc(toastMsg)}</div>` : ''}
   `;
 
   bindEvents();
   restoreSearchFocus();
   if(scannerOpen) startCamera();
+  if(quickAddOpen){
+    const qi = document.getElementById('quickAddInput');
+    if(qi) qi.focus();
+  }
 }
 
 function renderShelf(cat, term){
@@ -495,6 +508,23 @@ function renderModal(){
               <button type="button" class="btn-ghost" id="cancelBtn">Cancel·la</button>
               <button type="submit" class="btn-primary">${isNew?'Afegeix':'Desa'}</button>
             </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderQuickAdd(){
+  return `
+    <div class="overlay" id="quickOverlay">
+      <div class="modal quick-modal">
+        <h3>Apunta per comprar</h3>
+        <form id="quickAddForm">
+          <input type="text" id="quickAddInput" placeholder="Què cal comprar?" autocomplete="off">
+          <div class="modal-actions">
+            <button type="button" class="btn-ghost" id="quickCancelBtn">Cancel·la</button>
+            <button type="submit" class="btn-primary">Afegeix</button>
           </div>
         </form>
       </div>
@@ -621,6 +651,21 @@ function bindEvents(){
 
   const exportBtn = document.getElementById('exportBtn');
   if(exportBtn) exportBtn.onclick = exportList;
+
+  const fabBtn = document.getElementById('fabBtn');
+  if(fabBtn) fabBtn.onclick = () => { quickAddOpen = true; render(); };
+
+  const quickOverlay = document.getElementById('quickOverlay');
+  if(quickOverlay) quickOverlay.onclick = (e) => { if(e.target.id === 'quickOverlay'){ quickAddOpen = false; render(); } };
+  const quickCancelBtn = document.getElementById('quickCancelBtn');
+  if(quickCancelBtn) quickCancelBtn.onclick = () => { quickAddOpen = false; render(); };
+  const quickAddForm = document.getElementById('quickAddForm');
+  if(quickAddForm) quickAddForm.onsubmit = (e) => {
+    e.preventDefault();
+    const val = document.getElementById('quickAddInput').value;
+    quickAddOpen = false;
+    addExtra(val);
+  };
 
   const extraForm = document.getElementById('extraForm');
   if(extraForm) extraForm.onsubmit = (e) => {
