@@ -72,6 +72,8 @@ input,select{font-family:inherit;}
 .stepper button:first-child{border-radius:4px 0 0 4px;}
 .stepper button:last-child{border-radius:0 4px 4px 0;border-left:none;}
 .stepper button:hover{background:var(--surface-2);}
+.add-list-btn{background:none;border:1px solid var(--line);border-radius:4px;color:var(--ink-soft);font-size:11px;padding:4px 8px;flex:none;white-space:nowrap;}
+.add-list-btn:hover{color:var(--ink);border-color:var(--ink);}
 
 .empty{padding:18px 2px;font-size:13px;color:var(--ink-faint);font-style:italic;}
 
@@ -449,6 +451,7 @@ function renderItemRow(i){
         <div class="item-sub ${subClass}">${subLine}</div>
       </div>
       <div class="qty">${i.quantity}${esc(i.unit||'')}</div>
+      <button class="add-list-btn" data-addtolist="${esc(i.name)}" title="Afegeix a la llista de la compra">+ llista</button>
       <div class="stepper">
         <button data-step="${i.id}" data-delta="-1">–</button>
         <button data-step="${i.id}" data-delta="1">+</button>
@@ -644,6 +647,16 @@ function bindEvents(){
   });
   root.querySelectorAll('[data-step]').forEach(b => {
     b.onclick = (e) => { e.stopPropagation(); stepQty(b.dataset.step, parseFloat(b.dataset.delta)); };
+  });
+  root.querySelectorAll('[data-addtolist]').forEach(b => {
+    b.onclick = (e) => {
+      e.stopPropagation();
+      const name = b.dataset.addtolist;
+      const already = DATA.extras.some(x => x.name.toLowerCase() === name.toLowerCase());
+      if(already){ showToast('Ja hi és, a la llista.'); return; }
+      addExtra(name);
+      showToast('Afegit a la llista.');
+    };
   });
   root.querySelectorAll('[data-rmextra]').forEach(b => {
     b.onclick = () => removeExtra(b.dataset.rmextra);
