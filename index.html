@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rebost</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
+
+:root{
+  --bg:#EDEAE2;
+  --surface:#F7F5EF;
+  --surface-2:#E4E0D3;
+  --line:#D6D0BF;
+  --ink:#2F2C25;
+  --ink-soft:#726D5D;
+  --ink-faint:#9C9788;
+  --olive:#4B5842;
+  --walnut:#7B5B3F;
+  --ochre:#AD7C33;
+  --brick:#9C4A3D;
+  --radius:5px;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
+#root{min-height:100vh;}
+button{font-family:inherit;cursor:pointer;}
+input,select{font-family:inherit;}
+
+.wrap{max-width:920px;margin:0 auto;padding:28px 20px 80px;}
+
+.banner{background:var(--brick);color:#F7F5EF;font-size:13px;padding:10px 16px;text-align:center;}
+.banner button{background:none;border:1px solid #F7F5EF;color:#F7F5EF;border-radius:4px;padding:3px 9px;font-size:12px;margin-left:10px;}
+
+/* header */
+.hdr{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--line);gap:14px;flex-wrap:wrap;}
+.eyebrow{font-size:11px;letter-spacing:.14em;color:var(--ink-faint);text-transform:uppercase;margin:0 0 2px;}
+.h-title{font-family:'Fraunces',serif;font-weight:600;font-size:32px;margin:0;}
+.person-pill{position:relative;}
+.person-btn{display:flex;align-items:center;gap:8px;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:6px 12px 6px 8px;font-size:13px;color:var(--ink);}
+.dot{width:9px;height:9px;border-radius:50%;flex:none;}
+.person-menu{position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);box-shadow:0 4px 14px rgba(47,44,37,.1);z-index:20;min-width:140px;overflow:hidden;}
+.person-menu button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:9px 12px;font-size:13px;text-align:left;color:var(--ink);}
+.person-menu button:hover{background:var(--surface-2);}
+
+.search{width:100%;border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;font-size:13px;background:var(--surface);color:var(--ink);margin-bottom:22px;}
+
+/* layout */
+.grid{display:grid;grid-template-columns:1fr 300px;gap:34px;align-items:start;}
+@media(max-width:760px){.grid{grid-template-columns:1fr;}}
+
+/* category shelf */
+.shelf{margin-bottom:30px;}
+.shelf-hdr{display:flex;align-items:baseline;justify-content:space-between;border-bottom:2px solid var(--ink);padding-bottom:7px;margin-bottom:2px;}
+.shelf-name{font-family:'Fraunces',serif;font-weight:600;font-size:18px;}
+.shelf-count{font-size:12px;color:var(--ink-faint);margin-left:8px;font-family:'IBM Plex Mono',monospace;}
+.shelf-add{background:none;border:none;font-size:12px;color:var(--ink-soft);border-bottom:1px solid var(--ink-faint);padding:0 0 1px;}
+.shelf-add:hover{color:var(--ink);border-color:var(--ink);}
+
+.item-row{display:flex;align-items:center;gap:10px;padding:11px 2px;border-bottom:1px solid var(--line);}
+.item-row:hover{background:rgba(47,44,37,.025);cursor:pointer;}
+.item-main{flex:1;min-width:0;}
+.item-name{font-size:14px;font-weight:500;}
+.item-sub{font-size:11px;color:var(--ink-faint);margin-top:2px;}
+.item-sub.low{color:var(--brick);}
+.item-sub.warn{color:var(--ochre);}
+.qty{font-family:'IBM Plex Mono',monospace;font-size:13px;min-width:70px;text-align:right;}
+.stepper{display:flex;align-items:center;gap:0;flex:none;}
+.stepper button{width:24px;height:24px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;}
+.stepper button:first-child{border-radius:4px 0 0 4px;}
+.stepper button:last-child{border-radius:0 4px 4px 0;border-left:none;}
+.stepper button:hover{background:var(--surface-2);}
+
+.empty{padding:18px 2px;font-size:13px;color:var(--ink-faint);font-style:italic;}
+
+/* sidebar */
+.side-block{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:18px;}
+.side-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.side-title{font-family:'Fraunces',serif;font-weight:600;font-size:15px;margin:0;}
+.side-action{background:none;border:none;font-size:11px;color:var(--ink-soft);border-bottom:1px solid var(--ink-faint);padding:0;}
+.side-action:hover{color:var(--ink);border-color:var(--ink);}
+.side-empty{font-size:12px;color:var(--ink-faint);font-style:italic;}
+.buy-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;}
+.buy-row:last-child{border-bottom:none;}
+.buy-name{cursor:pointer;}
+.buy-name:hover{text-decoration:underline;}
+.buy-tag{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--brick);white-space:nowrap;}
+.buy-tag.warn{color:var(--ochre);}
+.extra-row{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13px;}
+.extra-x{background:none;border:none;color:var(--ink-faint);font-size:13px;padding:0 4px;}
+.extra-x:hover{color:var(--brick);}
+.extra-form{display:flex;gap:6px;margin-top:8px;}
+.extra-form input{flex:1;border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:13px;background:var(--bg);}
+.extra-form button{border:1px solid var(--ink);background:var(--ink);color:var(--surface);border-radius:4px;padding:6px 10px;font-size:12px;}
+
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(47,44,37,.35);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;}
+.modal{background:var(--surface);border-radius:var(--radius);padding:22px;width:100%;max-width:360px;}
+.modal h3{font-family:'Fraunces',serif;font-size:18px;margin:0 0 16px;}
+.field{margin-bottom:12px;}
+.field label{display:block;font-size:11px;color:var(--ink-soft);margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em;}
+.field input,.field select{width:100%;border:1px solid var(--line);border-radius:4px;padding:8px 9px;font-size:14px;background:var(--bg);color:var(--ink);}
+.field-row{display:flex;gap:10px;}
+.field-row .field{flex:1;}
+.barcode-row{display:flex;gap:6px;}
+.barcode-row input{flex:1;}
+.scan-btn{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:4px;padding:0 10px;font-size:12px;white-space:nowrap;}
+.scan-btn:hover{background:var(--line);}
+.modal-actions{display:flex;justify-content:space-between;align-items:center;margin-top:18px;}
+.btn-primary{background:var(--ink);color:var(--surface);border:1px solid var(--ink);border-radius:4px;padding:9px 16px;font-size:13px;}
+.btn-ghost{background:none;border:none;color:var(--ink-soft);font-size:13px;}
+.btn-ghost:hover{color:var(--ink);}
+.btn-delete{background:none;border:none;color:var(--brick);font-size:12px;}
+.btn-delete:hover{text-decoration:underline;}
+
+/* scanner */
+.scan-video{width:100%;border-radius:4px;background:#111;aspect-ratio:4/3;object-fit:cover;}
+.scan-hint{font-size:12px;color:var(--ink-soft);margin-top:10px;}
+
+/* person picker */
+.picker{min-height:100vh;display:flex;align-items:center;justify-content:center;}
+.picker-card{text-align:center;max-width:300px;}
+.picker-card .h-title{margin-bottom:6px;}
+.picker-sub{font-size:13px;color:var(--ink-soft);margin-bottom:22px;}
+.picker-list{display:flex;flex-direction:column;gap:8px;}
+.picker-list button{display:flex;align-items:center;gap:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;font-size:14px;color:var(--ink);}
+.picker-list button:hover{background:var(--surface-2);}
+
+.loading{min-height:100vh;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--ink-faint);}
+
+.toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--surface);font-size:13px;padding:10px 18px;border-radius:20px;z-index:60;}
+</style>
+</head>
+<body>
+<div id="root"><div class="loading">Obrint el rebost…</div></div>
+
+<script>
+const SUPABASE_URL = 'https://ohdlepatzsraorbvjrgv.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9oZGxlcGF0enNyYW9yYnZqcmd2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM1MjA5NDksImV4cCI6MjA5OTA5Njk0OX0.gahxia4ClG9_PETysANESh1cW_eoRNlH01Camnir_7Y';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const CATS = ['Nevera','Congelador','Rebost'];
+const PEOPLE = [
+  {name:'Guillem', color:'var(--olive)'},
+  {name:'Mare', color:'var(--walnut)'},
+  {name:'Germà', color:'var(--ochre)'}
+];
+const EXPIRY_WARN_DAYS = 5;
+
+let DATA = {items:[], extras:[]};
+let BARCODES = {};
+let ME = null;
+let modalOpen = false;
+let modalDraft = null;
+let modalEditId = null;
+let personMenuOpen = false;
+let searchTerm = '';
+let scannerOpen = false;
+let scanStream = null;
+let connError = false;
+let toastMsg = null;
+let toastTimer = null;
+
+const root = document.getElementById('root');
+const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const personColor = (name) => (PEOPLE.find(p=>p.name===name)||{}).color || 'var(--ink-faint)';
+
+/* ---------- persistence ---------- */
+
+function loadPerson(){
+  try{ return localStorage.getItem('rebost-me'); }catch(e){ return null; }
+}
+function savePerson(name){
+  try{ localStorage.setItem('rebost-me', name); }catch(e){}
+}
+
+async function loadData(){
+  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}] = await Promise.all([
+    sb.from('items').select('*').order('name'),
+    sb.from('extras').select('*').order('created_at'),
+    sb.from('barcodes').select('*')
+  ]);
+  if(e1 || e2) throw (e1 || e2);
+  DATA.items = items || [];
+  DATA.extras = extras || [];
+  BARCODES = {};
+  (barcodes||[]).forEach(b => BARCODES[b.barcode] = b);
+}
+
+async function init(){
+  ME = loadPerson();
+  try{
+    await loadData();
+    connError = false;
+  }catch(e){
+    connError = true;
+  }
+  render();
+  subscribeRealtime();
+}
+
+function subscribeRealtime(){
+  sb.channel('rebost-live')
+    .on('postgres_changes', {event:'*', schema:'public', table:'items'}, () => reloadQuiet())
+    .on('postgres_changes', {event:'*', schema:'public', table:'extras'}, () => reloadQuiet())
+    .subscribe();
+}
+async function reloadQuiet(){
+  try{ await loadData(); connError = false; render(); }catch(e){ /* keep last good state */ }
+}
+
+function setPerson(name){
+  ME = name;
+  savePerson(name);
+  render();
+}
+
+/* ---------- mutations ---------- */
+
+async function saveItem(fields, existingId){
+  try{
+    if(existingId){
+      await sb.from('items').update({...fields, updated_by: ME, updated_at: new Date().toISOString()}).eq('id', existingId);
+    }else{
+      await sb.from('items').insert({...fields, updated_by: ME, updated_at: new Date().toISOString()});
+    }
+    if(fields.barcode){
+      await sb.from('barcodes').upsert({barcode: fields.barcode, name: fields.name, category: fields.category, unit: fields.unit});
+    }
+    await loadData(); connError = false;
+  }catch(e){ connError = true; }
+  render();
+}
+async function deleteItem(id){
+  try{ await sb.from('items').delete().eq('id', id); await loadData(); connError = false; }
+  catch(e){ connError = true; }
+  render();
+}
+async function stepQty(id, delta){
+  const it = DATA.items.find(i=>i.id===id);
+  if(!it) return;
+  const newQty = Math.max(0, Math.round((it.quantity + delta) * 100) / 100);
+  it.quantity = newQty; render(); // optimistic
+  try{ await sb.from('items').update({quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()}).eq('id', id); }
+  catch(e){ connError = true; render(); }
+}
+async function addExtra(name){
+  if(!name.trim()) return;
+  try{ await sb.from('extras').insert({name:name.trim(), added_by:ME}); await loadData(); connError=false; }
+  catch(e){ connError = true; }
+  render();
+}
+async function removeExtra(id){
+  try{ await sb.from('extras').delete().eq('id', id); await loadData(); connError=false; }
+  catch(e){ connError = true; }
+  render();
+}
+
+/* ---------- helpers ---------- */
+
+function daysUntil(dateStr){
+  if(!dateStr) return null;
+  const d = new Date(dateStr + 'T00:00:00');
+  const today = new Date(); today.setHours(0,0,0,0);
+  return Math.round((d - today) / 86400000);
+}
+function expiryLabel(days){
+  if(days < 0) return `caducat fa ${Math.abs(days)}d`;
+  if(days === 0) return 'caduca avui';
+  if(days === 1) return 'caduca demà';
+  return `caduca en ${days}d`;
+}
+function timeAgo(ts){
+  if(!ts) return '';
+  const mins = Math.floor((Date.now()-new Date(ts).getTime())/60000);
+  if(mins < 1) return 'ara mateix';
+  if(mins < 60) return `fa ${mins} min`;
+  const hrs = Math.floor(mins/60);
+  if(hrs < 24) return `fa ${hrs} h`;
+  const days = Math.floor(hrs/24);
+  if(days < 7) return `fa ${days} d`;
+  return new Date(ts).toLocaleDateString('ca-ES', {day:'numeric', month:'short'});
+}
+function showToast(msg){
+  toastMsg = msg; render();
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ toastMsg = null; render(); }, 2200);
+}
+function exportList(){
+  const low = DATA.items.filter(i => i.min_threshold > 0 && i.quantity <= i.min_threshold);
+  const lines = ['Llista de la compra'];
+  if(low.length){
+    lines.push('');
+    low.forEach(i => lines.push(`- ${i.name} (${i.quantity}${i.unit||''}, mín ${i.min_threshold})`));
+  }
+  if(DATA.extras.length){
+    lines.push('');
+    DATA.extras.forEach(e => lines.push(`- ${e.name}`));
+  }
+  if(low.length===0 && DATA.extras.length===0){ showToast('No hi ha res a la llista.'); return; }
+  const text = lines.join('\n');
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(()=>showToast('Copiat. Ja ho pots enganxar.')).catch(()=>showToast('No s\'ha pogut copiar.'));
+  }else{
+    showToast('No s\'ha pogut copiar.');
+  }
+}
+
+/* ---------- render ---------- */
+
+function render(){
+  if(!ME){ renderPicker(); return; }
+
+  const term = searchTerm.trim().toLowerCase();
+  const lowStock = DATA.items.filter(i => i.min_threshold > 0 && i.quantity <= i.min_threshold);
+  const expiringSoon = DATA.items
+    .filter(i => i.expiry_date && daysUntil(i.expiry_date) <= EXPIRY_WARN_DAYS)
+    .sort((a,b) => daysUntil(a.expiry_date) - daysUntil(b.expiry_date));
+
+  root.innerHTML = `
+    ${connError ? `<div class="banner">No es pot connectar amb el servidor ara mateix.</div>` : ''}
+    <div class="wrap">
+      <div class="hdr">
+        <div>
+          <p class="eyebrow">Casa</p>
+          <h1 class="h-title">Rebost</h1>
+        </div>
+        <div class="person-pill">
+          <button class="person-btn" id="personBtn">
+            <span class="dot" style="background:${personColor(ME)}"></span>
+            ${esc(ME)}
+          </button>
+          ${personMenuOpen ? `
+            <div class="person-menu">
+              ${PEOPLE.map(p => `
+                <button data-person="${esc(p.name)}">
+                  <span class="dot" style="background:${p.color}"></span>${esc(p.name)}
+                </button>`).join('')}
+            </div>` : ''}
+        </div>
+      </div>
+
+      <input type="text" class="search" id="searchInput" placeholder="Cerca un article…" value="${esc(searchTerm)}" autocomplete="off">
+
+      <div class="grid">
+        <div>
+          ${CATS.map(cat => renderShelf(cat, term)).join('')}
+        </div>
+
+        <div>
+          <div class="side-block">
+            <div class="side-hdr">
+              <p class="side-title">Per reposar</p>
+              <button class="side-action" id="exportBtn">Copia per WhatsApp</button>
+            </div>
+            ${lowStock.length === 0
+              ? `<p class="side-empty">Tot per sobre del mínim.</p>`
+              : lowStock.map(i => `
+                  <div class="buy-row">
+                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}</span>
+                    <span class="buy-tag">${i.quantity}${esc(i.unit||'')} / mín ${i.min_threshold}</span>
+                  </div>`).join('')}
+          </div>
+
+          ${expiringSoon.length ? `
+          <div class="side-block">
+            <p class="side-title">Caduca aviat</p>
+            ${expiringSoon.map(i => `
+              <div class="buy-row">
+                <span class="buy-name" data-edit="${i.id}">${esc(i.name)}</span>
+                <span class="buy-tag ${daysUntil(i.expiry_date)>=0?'warn':''}">${expiryLabel(daysUntil(i.expiry_date))}</span>
+              </div>`).join('')}
+          </div>` : ''}
+
+          <div class="side-block">
+            <p class="side-title">Afegits a mà</p>
+            ${DATA.extras.length === 0
+              ? `<p class="side-empty">Res afegit encara.</p>`
+              : DATA.extras.map(e => `
+                  <div class="extra-row">
+                    <button class="extra-x" data-rmextra="${e.id}">✕</button>
+                    <span style="flex:1">${esc(e.name)}</span>
+                    <span class="dot" style="background:${personColor(e.added_by)}"></span>
+                  </div>`).join('')}
+            <form class="extra-form" id="extraForm">
+              <input type="text" placeholder="p. ex. paper de vàter" id="extraInput" autocomplete="off">
+              <button type="submit">Afegeix</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    ${modalOpen ? renderModal() : ''}
+    ${scannerOpen ? renderScanner() : ''}
+    ${toastMsg ? `<div class="toast">${esc(toastMsg)}</div>` : ''}
+  `;
+
+  bindEvents();
+  restoreSearchFocus();
+  if(scannerOpen) startCamera();
+}
+
+function renderShelf(cat, term){
+  let items = DATA.items.filter(i => i.category === cat);
+  if(term) items = items.filter(i => i.name.toLowerCase().includes(term));
+  items = items.sort((a,b)=>a.name.localeCompare(b.name,'ca'));
+  return `
+    <div class="shelf">
+      <div class="shelf-hdr">
+        <span><span class="shelf-name">${cat}</span><span class="shelf-count">${items.length}</span></span>
+        <button class="shelf-add" data-newcat="${cat}">+ Afegeix</button>
+      </div>
+      ${items.length === 0
+        ? `<div class="empty">${term ? 'Cap resultat aquí.' : 'Res per aquí encara.'}</div>`
+        : items.map(i => renderItemRow(i)).join('')}
+    </div>
+  `;
+}
+
+function renderItemRow(i){
+  const low = i.min_threshold > 0 && i.quantity <= i.min_threshold;
+  const days = i.expiry_date ? daysUntil(i.expiry_date) : null;
+  const expiringSoon = days !== null && days <= EXPIRY_WARN_DAYS;
+
+  let subLine, subClass = '';
+  if(low){ subLine = `per sota del mínim (${i.min_threshold})`; subClass = 'low'; }
+  else if(expiringSoon){ subLine = expiryLabel(days); subClass = days < 0 ? 'low' : 'warn'; }
+  else { subLine = `${esc(i.updated_by||'')} · ${timeAgo(i.updated_at)}`; }
+
+  return `
+    <div class="item-row" data-edit="${i.id}">
+      <span class="dot" style="background:${personColor(i.updated_by)}" title="${esc(i.updated_by||'')}"></span>
+      <div class="item-main">
+        <div class="item-name">${esc(i.name)}</div>
+        <div class="item-sub ${subClass}">${subLine}</div>
+      </div>
+      <div class="qty">${i.quantity}${esc(i.unit||'')}</div>
+      <div class="stepper">
+        <button data-step="${i.id}" data-delta="-1">–</button>
+        <button data-step="${i.id}" data-delta="1">+</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderModal(){
+  const isNew = modalEditId === null;
+  const d = modalDraft;
+  return `
+    <div class="overlay" id="overlay">
+      <div class="modal">
+        <h3>${isNew ? 'Nou article' : 'Edita article'}</h3>
+        <form id="itemForm">
+          <div class="field">
+            <label>Codi de barres</label>
+            <div class="barcode-row">
+              <input type="text" id="f-barcode" value="${esc(d.barcode)}" placeholder="opcional" inputmode="numeric">
+              <button type="button" class="scan-btn" id="scanBtn">Escaneja</button>
+            </div>
+          </div>
+          <div class="field">
+            <label>Nom</label>
+            <input type="text" id="f-name" value="${esc(d.name)}" required autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Categoria</label>
+            <select id="f-cat">
+              ${CATS.map(c=>`<option value="${c}" ${c===d.category?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Quantitat</label>
+              <input type="number" step="any" id="f-qty" value="${d.quantity}" required>
+            </div>
+            <div class="field">
+              <label>Unitat</label>
+              <input type="text" id="f-unit" value="${esc(d.unit)}" placeholder="uds, kg, L…">
+            </div>
+          </div>
+          <div class="field-row">
+            <div class="field">
+              <label>Reposar quan arribi a</label>
+              <input type="number" step="any" id="f-min" value="${d.minThreshold}">
+            </div>
+            <div class="field">
+              <label>Caducitat</label>
+              <input type="date" id="f-expiry" value="${esc(d.expiryDate)}">
+            </div>
+          </div>
+          <div class="modal-actions">
+            ${!isNew ? `<button type="button" class="btn-delete" id="deleteBtn">Elimina</button>` : `<span></span>`}
+            <div style="display:flex;gap:14px;align-items:center;">
+              <button type="button" class="btn-ghost" id="cancelBtn">Cancel·la</button>
+              <button type="submit" class="btn-primary">${isNew?'Afegeix':'Desa'}</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
+function renderScanner(){
+  return `
+    <div class="overlay" id="scanOverlay">
+      <div class="modal" style="text-align:center;">
+        <h3>Escaneja el codi</h3>
+        <video id="scanVideo" class="scan-video" playsinline muted></video>
+        <p class="scan-hint" id="scanHint">Apunta al codi de barres…</p>
+        <div class="field" style="margin-top:6px;">
+          <input type="text" id="scanManualInput" placeholder="O escriu el codi a mà" inputmode="numeric">
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn-ghost" id="scanCancelBtn">Cancel·la</button>
+          <button type="button" class="btn-primary" id="scanManualBtn">Fes servir aquest codi</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+/* ---------- scanning ---------- */
+
+function openScanner(){ scannerOpen = true; render(); }
+function closeScanner(){
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  scannerOpen = false; render();
+}
+async function startCamera(){
+  const video = document.getElementById('scanVideo');
+  const hint = document.getElementById('scanHint');
+  if(!video) return;
+  try{
+    scanStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}});
+    video.srcObject = scanStream;
+    await video.play();
+    if('BarcodeDetector' in window){
+      const detector = new BarcodeDetector({formats:['ean_13','ean_8','upc_a','upc_e','code_128']});
+      scanLoop(video, detector);
+    }else if(hint){
+      hint.textContent = 'Aquest navegador no llegeix codis automàticament. Escriu-lo a sota.';
+    }
+  }catch(e){
+    if(hint) hint.textContent = 'No hi ha accés a la càmera aquí. Escriu el codi a sota.';
+  }
+}
+function scanLoop(video, detector){
+  if(!scannerOpen) return;
+  detector.detect(video).then(codes => {
+    if(codes.length > 0){
+      applyScannedCode(codes[0].rawValue);
+    }else{
+      requestAnimationFrame(() => scanLoop(video, detector));
+    }
+  }).catch(() => requestAnimationFrame(() => scanLoop(video, detector)));
+}
+function applyScannedCode(code){
+  if(scanStream){ scanStream.getTracks().forEach(t=>t.stop()); scanStream = null; }
+  scannerOpen = false;
+  modalDraft.barcode = code;
+  const cached = BARCODES[code];
+  if(cached){
+    if(!modalDraft.name) modalDraft.name = cached.name || '';
+    if(cached.category) modalDraft.category = cached.category;
+    if(!modalDraft.unit && cached.unit) modalDraft.unit = cached.unit;
+  }
+  render();
+}
+
+/* ---------- events ---------- */
+
+function restoreSearchFocus(){
+  const el = document.getElementById('searchInput');
+  if(el && document.activeElement !== el && el.dataset.wasFocused){
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+}
+
+function bindEvents(){
+  const personBtn = document.getElementById('personBtn');
+  if(personBtn) personBtn.onclick = () => { personMenuOpen = !personMenuOpen; render(); };
+  root.querySelectorAll('[data-person]').forEach(b => {
+    b.onclick = () => { personMenuOpen = false; setPerson(b.dataset.person); };
+  });
+
+  const searchInput = document.getElementById('searchInput');
+  if(searchInput){
+    searchInput.oninput = (e) => {
+      searchTerm = e.target.value;
+      e.target.dataset.wasFocused = '1';
+      render();
+    };
+  }
+
+  root.querySelectorAll('[data-newcat]').forEach(b => {
+    b.onclick = () => {
+      modalDraft = {name:'', category:b.dataset.newcat, quantity:1, unit:'', minThreshold:1, expiryDate:'', barcode:''};
+      modalEditId = null; modalOpen = true; render();
+    };
+  });
+  root.querySelectorAll('[data-edit]').forEach(el => {
+    el.onclick = (e) => {
+      if(e.target.closest('.stepper')) return;
+      const id = el.dataset.edit;
+      const it = DATA.items.find(i=>i.id===id);
+      if(it){
+        modalDraft = {name:it.name, category:it.category, quantity:it.quantity, unit:it.unit||'', minThreshold:it.min_threshold, expiryDate:it.expiry_date||'', barcode:it.barcode||''};
+        modalEditId = id; modalOpen = true; render();
+      }
+    };
+  });
+  root.querySelectorAll('[data-step]').forEach(b => {
+    b.onclick = (e) => { e.stopPropagation(); stepQty(b.dataset.step, parseFloat(b.dataset.delta)); };
+  });
+  root.querySelectorAll('[data-rmextra]').forEach(b => {
+    b.onclick = () => removeExtra(b.dataset.rmextra);
+  });
+
+  const exportBtn = document.getElementById('exportBtn');
+  if(exportBtn) exportBtn.onclick = exportList;
+
+  const extraForm = document.getElementById('extraForm');
+  if(extraForm) extraForm.onsubmit = (e) => {
+    e.preventDefault();
+    const input = document.getElementById('extraInput');
+    addExtra(input.value);
+  };
+
+  const overlay = document.getElementById('overlay');
+  if(overlay) overlay.onclick = (e) => { if(e.target.id === 'overlay'){ closeModal(); } };
+  const cancelBtn = document.getElementById('cancelBtn');
+  if(cancelBtn) cancelBtn.onclick = closeModal;
+  const deleteBtn = document.getElementById('deleteBtn');
+  if(deleteBtn) deleteBtn.onclick = () => { const id = modalEditId; closeModal(); deleteItem(id); };
+
+  ['f-name','f-cat','f-qty','f-unit','f-min','f-expiry','f-barcode'].forEach(id => {
+    const el = document.getElementById(id);
+    if(!el) return;
+    const handler = (e) => {
+      if(id==='f-name') modalDraft.name = e.target.value;
+      else if(id==='f-cat') modalDraft.category = e.target.value;
+      else if(id==='f-qty') modalDraft.quantity = parseFloat(e.target.value) || 0;
+      else if(id==='f-unit') modalDraft.unit = e.target.value;
+      else if(id==='f-min') modalDraft.minThreshold = parseFloat(e.target.value) || 0;
+      else if(id==='f-expiry') modalDraft.expiryDate = e.target.value;
+      else if(id==='f-barcode') modalDraft.barcode = e.target.value;
+    };
+    el.addEventListener('input', handler);
+    el.addEventListener('change', handler);
+  });
+
+  const scanBtn = document.getElementById('scanBtn');
+  if(scanBtn) scanBtn.onclick = openScanner;
+
+  const itemForm = document.getElementById('itemForm');
+  if(itemForm) itemForm.onsubmit = (e) => {
+    e.preventDefault();
+    if(!modalDraft.name.trim()) return;
+    const fields = {
+      name: modalDraft.name.trim(),
+      category: modalDraft.category,
+      quantity: modalDraft.quantity,
+      unit: modalDraft.unit.trim(),
+      min_threshold: modalDraft.minThreshold,
+      expiry_date: modalDraft.expiryDate || null,
+      barcode: modalDraft.barcode.trim() || null,
+    };
+    const existingId = modalEditId;
+    const wasOpen = true;
+    modalOpen = false;
+    saveItem(fields, existingId);
+  };
+
+  const scanCancelBtn = document.getElementById('scanCancelBtn');
+  if(scanCancelBtn) scanCancelBtn.onclick = closeScanner;
+  const scanManualBtn = document.getElementById('scanManualBtn');
+  if(scanManualBtn) scanManualBtn.onclick = () => {
+    const v = document.getElementById('scanManualInput').value.trim();
+    if(v) applyScannedCode(v);
+  };
+}
+
+function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; render(); }
+
+function renderPicker(){
+  root.innerHTML = `
+    <div class="picker">
+      <div class="picker-card">
+        <p class="eyebrow">Rebost</p>
+        <h1 class="h-title">Qui ets?</h1>
+        <p class="picker-sub">Perquè sapiguem qui ha tocat què.</p>
+        <div class="picker-list">
+          ${PEOPLE.map(p => `
+            <button data-pick="${esc(p.name)}">
+              <span class="dot" style="background:${p.color}"></span>${esc(p.name)}
+            </button>`).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+  root.querySelectorAll('[data-pick]').forEach(b => {
+    b.onclick = () => setPerson(b.dataset.pick);
+  });
+}
+
+init();
+</script>
+</body>
+</html>
