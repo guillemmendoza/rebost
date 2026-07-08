@@ -225,43 +225,6 @@ async function logActivity(action, detail){
   try{ await sb.from('activity').insert({actor: ME, action, detail}); }catch(e){}
 }
 
-const NOTIFY_KEY = 'rebost-last-notify-date';
-const todayStr = () => new Date().toISOString().slice(0,10);
-
-async function maybeNotify(){
-  if(!('Notification' in window) || Notification.permission !== 'granted') return;
-  if(localStorage.getItem(NOTIFY_KEY) === todayStr()) return;
-  const low = DATA.items.filter(i => i.min_threshold > 0 && i.quantity <= i.min_threshold);
-  const expiring = DATA.items.filter(i => i.expiry_date && daysUntil(i.expiry_date) <= EXPIRY_WARN_DAYS);
-  if(low.length === 0 && expiring.length === 0) return;
-  const parts = [];
-  if(low.length) parts.push(`${low.length} per reposar`);
-  if(expiring.length) parts.push(`${expiring.length} que caduquen aviat`);
-  try{
-    const reg = await navigator.serviceWorker.ready;
-    reg.showNotification('Rebost', {body: parts.join(' · '), icon:'icon-192.png', badge:'icon-192.png'});
-    localStorage.setItem(NOTIFY_KEY, todayStr());
-  }catch(e){}
-}
-
-async function tryPeriodicSync(){
-  try{
-    const reg = await navigator.serviceWorker.ready;
-    if('periodicSync' in reg){
-      const status = await navigator.permissions.query({name:'periodic-background-sync'});
-      if(status.state === 'granted') await reg.periodicSync.register('rebost-check', {minInterval: 24*60*60*1000});
-    }
-  }catch(e){}
-}
-
-async function enableNotifications(){
-  if(!('Notification' in window)){ showToast('Aquest navegador no admet notificacions.'); return; }
-  const perm = await Notification.requestPermission();
-  if(perm === 'granted'){ showToast('Avisos activats.'); maybeNotify(); tryPeriodicSync(); }
-  else showToast('Avisos no activats.');
-  render();
-}
-
 async function init(){
   ME = loadPerson();
   try{
@@ -272,7 +235,6 @@ async function init(){
   }
   render();
   subscribeRealtime();
-  maybeNotify();
 }
 
 function subscribeRealtime(){
@@ -431,7 +393,6 @@ function render(){
           <h1 class="h-title">Rebost</h1>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
-          ${(('Notification' in window) && Notification.permission === 'default') ? `<button class="side-action" id="notifyBtn">Activa avisos</button>` : ''}
           <div class="person-pill">
           <button class="person-btn" id="personBtn">
             <span class="dot" style="background:${personColor(ME)}"></span>
@@ -457,6 +418,17 @@ function render(){
 
         <div>
           <div class="side-block">
+            <p class="side-title">Caduca aviat</p>
+            ${expiringSoon.length === 0
+              ? `<p class="side-empty">Res a la vista, tranquil.</p>`
+              : expiringSoon.map(i => `
+                  <div class="buy-row">
+                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}</span>
+                    <span class="buy-tag ${daysUntil(i.expiry_date)>=0?'warn':''}">${expiryLabel(daysUntil(i.expiry_date))}</span>
+                  </div>`).join('')}
+          </div>
+
+          <div class="side-block">
             <div class="side-hdr">
               <p class="side-title">Per reposar</p>
               <button class="side-action" id="exportBtn">Copia per WhatsApp</button>
@@ -472,16 +444,6 @@ function render(){
                     </span>
                   </div>`).join('')}
           </div>
-
-          ${expiringSoon.length ? `
-          <div class="side-block">
-            <p class="side-title">Caduca aviat</p>
-            ${expiringSoon.map(i => `
-              <div class="buy-row">
-                <span class="buy-name" data-edit="${i.id}">${esc(i.name)}</span>
-                <span class="buy-tag ${daysUntil(i.expiry_date)>=0?'warn':''}">${expiryLabel(daysUntil(i.expiry_date))}</span>
-              </div>`).join('')}
-          </div>` : ''}
 
           <div class="side-block">
             <p class="side-title">Afegits a mà</p>
@@ -764,8 +726,6 @@ function restoreSearchFocus(){
 function bindEvents(){
   const personBtn = document.getElementById('personBtn');
   if(personBtn) personBtn.onclick = () => { personMenuOpen = !personMenuOpen; render(); };
-  const notifyBtn = document.getElementById('notifyBtn');
-  if(notifyBtn) notifyBtn.onclick = enableNotifications;
   root.querySelectorAll('[data-person]').forEach(b => {
     b.onclick = () => { personMenuOpen = false; setPerson(b.dataset.person); };
   });
