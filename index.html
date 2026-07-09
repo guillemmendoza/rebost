@@ -112,7 +112,8 @@ input,select{font-family:inherit;}
 .side-empty{font-size:12px;color:var(--ink-faint);font-style:italic;}
 .buy-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13px;}
 .buy-row:last-child{border-bottom:none;}
-.buy-name{cursor:pointer;}
+.buy-name{cursor:pointer;display:flex;flex-direction:column;line-height:1.35;}
+.buy-store{font-size:11px;color:var(--ink-faint);font-weight:400;}
 .buy-name:hover{text-decoration:underline;}
 .buy-tag{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--brick);white-space:nowrap;}
 .buy-tag.warn{color:var(--ochre);}
@@ -598,7 +599,7 @@ function render(){
               ? `<p class="side-empty">Tot per sobre del mínim.</p>`
               : lowStock.map(i => `
                   <div class="buy-row">
-                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}</span>
+                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}${i.store ? `<span class="buy-store">${esc(i.store)}</span>` : ''}</span>
                     <span style="display:flex;align-items:center;gap:8px;">
                       <span class="buy-tag">${i.quantity}${esc(i.unit||'')} / mín ${i.min_threshold}</span>
                       <button class="side-action" data-reconcile="${i.id}">Comprat</button>
@@ -721,9 +722,15 @@ function renderModal(){
             <label>Nom</label>
             <input type="text" id="f-name" value="${esc(d.name)}" required autocomplete="off">
           </div>
-          <div class="field">
-            <label>Marca</label>
-            <input type="text" id="f-brand" value="${esc(d.brand)}" placeholder="opcional" autocomplete="off">
+          <div class="field-row">
+            <div class="field">
+              <label>Marca</label>
+              <input type="text" id="f-brand" value="${esc(d.brand)}" placeholder="opcional" autocomplete="off">
+            </div>
+            <div class="field">
+              <label>On es compra</label>
+              <input type="text" id="f-store" value="${esc(d.store)}" placeholder="p. ex. Mercadona" autocomplete="off">
+            </div>
           </div>
           <div class="field">
             <label>Categoria</label>
@@ -934,7 +941,7 @@ function bindEvents(){
 
   root.querySelectorAll('[data-newcat]').forEach(b => {
     b.onclick = () => {
-      modalDraft = {name:'', category:b.dataset.newcat, quantity:1, unit:'', minThreshold:0, expiryDate:'', barcode:'', brand:'', notes:'', openedDate:'', shelfLifeDays:'', expiryType:'caducitat'};
+      modalDraft = {name:'', category:b.dataset.newcat, quantity:1, unit:'', minThreshold:0, expiryDate:'', barcode:'', brand:'', store:'', notes:'', openedDate:'', shelfLifeDays:'', expiryType:'caducitat'};
       modalEditId = null; modalOpen = true; render();
     };
   });
@@ -944,7 +951,7 @@ function bindEvents(){
       const id = el.dataset.edit;
       const it = DATA.items.find(i=>i.id===id);
       if(it){
-        modalDraft = {name:it.name, category:it.category, quantity:it.quantity, unit:it.unit||'', minThreshold:it.min_threshold, expiryDate:it.expiry_date||'', barcode:it.barcode||'', brand:it.brand||'', notes:it.notes||'', openedDate:it.opened_date||'', shelfLifeDays:it.shelf_life_days||'', expiryType:it.expiry_type||'caducitat'};
+        modalDraft = {name:it.name, category:it.category, quantity:it.quantity, unit:it.unit||'', minThreshold:it.min_threshold, expiryDate:it.expiry_date||'', barcode:it.barcode||'', brand:it.brand||'', store:it.store||'', notes:it.notes||'', openedDate:it.opened_date||'', shelfLifeDays:it.shelf_life_days||'', expiryType:it.expiry_type||'caducitat'};
         modalEditId = id; modalOpen = true; render();
       }
     };
@@ -1024,7 +1031,7 @@ function bindEvents(){
   const deleteBtn = document.getElementById('deleteBtn');
   if(deleteBtn) deleteBtn.onclick = () => { const id = modalEditId; closeModal(); deleteItem(id); };
 
-  ['f-name','f-cat','f-qty','f-unit','f-min','f-expiry','f-barcode','f-brand','f-notes','f-opened','f-shelflife'].forEach(id => {
+  ['f-name','f-cat','f-qty','f-unit','f-min','f-expiry','f-barcode','f-brand','f-store','f-notes','f-opened','f-shelflife'].forEach(id => {
     const el = document.getElementById(id);
     if(!el) return;
     const handler = (e) => {
@@ -1036,6 +1043,7 @@ function bindEvents(){
       else if(id==='f-expiry') modalDraft.expiryDate = e.target.value;
       else if(id==='f-barcode') modalDraft.barcode = e.target.value;
       else if(id==='f-brand') modalDraft.brand = e.target.value;
+      else if(id==='f-store') modalDraft.store = e.target.value;
       else if(id==='f-notes') modalDraft.notes = e.target.value;
       else if(id==='f-opened') modalDraft.openedDate = e.target.value;
       else if(id==='f-shelflife') modalDraft.shelfLifeDays = e.target.value;
@@ -1063,6 +1071,7 @@ function bindEvents(){
       expiry_date: modalDraft.expiryDate || null,
       barcode: modalDraft.barcode.trim() || null,
       brand: modalDraft.brand.trim() || null,
+      store: modalDraft.store.trim() || null,
       notes: modalDraft.notes.trim() || null,
       opened_date: modalDraft.openedDate || null,
       shelf_life_days: modalDraft.shelfLifeDays ? parseInt(modalDraft.shelfLifeDays, 10) : null,
