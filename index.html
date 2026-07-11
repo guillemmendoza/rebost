@@ -7,6 +7,7 @@
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#4B5842">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" type="image/png" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Rebost">
@@ -49,7 +50,7 @@ body,#root,.wrap{transition:background-color .15s ease, color .15s ease;}
 *{box-sizing:border-box;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
 #root{min-height:100vh;}
-button{font-family:inherit;cursor:pointer;}
+button{font-family:inherit;cursor:pointer;transition:background-color .12s ease,border-color .12s ease,color .12s ease,opacity .12s ease;}
 input,select{font-family:inherit;}
 
 .wrap{max-width:920px;margin:0 auto;padding:28px 20px 80px;}
@@ -135,8 +136,10 @@ input,select{font-family:inherit;}
 .manage-link{font-size:11px;color:var(--ink-faint);border:none;background:none;text-decoration:underline;padding:0;margin-bottom:4px;}
 
 /* modal */
-.overlay{position:fixed;inset:0;background:rgba(47,44,37,.35);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;}
-.modal{background:var(--surface);border-radius:var(--radius);padding:22px;width:100%;max-width:360px;max-height:88vh;overflow-y:auto;}
+.overlay{position:fixed;inset:0;background:rgba(47,44,37,.35);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px;animation:fadeIn .15s ease;}
+@keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+@keyframes modalIn{from{opacity:0;transform:translateY(6px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
+.modal{background:var(--surface);border-radius:var(--radius);padding:22px;width:100%;max-width:360px;max-height:88vh;overflow-y:auto;animation:modalIn .18s ease;}
 .field textarea{width:100%;border:1px solid var(--line);border-radius:4px;padding:8px 9px;font-size:14px;background:var(--bg);color:var(--ink);font-family:inherit;resize:vertical;}
 .expiry-type-row{display:flex;gap:8px;}
 .radio-pill{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:16px;padding:6px 12px;font-size:12.5px;color:var(--ink-soft);flex:1;justify-content:center;cursor:pointer;}
@@ -233,6 +236,7 @@ let adminPassError = false;
 let editingPersonId = null;
 let addingPerson = false;
 let adminColorDraft = null; // {personId, h, s, l}
+let confirmState = null; // {message, onConfirm}
 
 const root = document.getElementById('root');
 const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -344,12 +348,17 @@ async function init(){
 
 function subscribeRealtime(){
   sb.channel('rebost-live')
-    .on('postgres_changes', {event:'*', schema:'public', table:'items'}, () => reloadQuiet())
-    .on('postgres_changes', {event:'*', schema:'public', table:'extras'}, () => reloadQuiet())
-    .on('postgres_changes', {event:'*', schema:'public', table:'activity'}, () => reloadQuiet())
-    .on('postgres_changes', {event:'*', schema:'public', table:'shortcuts'}, () => reloadQuiet())
-    .on('postgres_changes', {event:'*', schema:'public', table:'people'}, () => reloadQuiet())
+    .on('postgres_changes', {event:'*', schema:'public', table:'items'}, () => reloadQuietDebounced())
+    .on('postgres_changes', {event:'*', schema:'public', table:'extras'}, () => reloadQuietDebounced())
+    .on('postgres_changes', {event:'*', schema:'public', table:'activity'}, () => reloadQuietDebounced())
+    .on('postgres_changes', {event:'*', schema:'public', table:'shortcuts'}, () => reloadQuietDebounced())
+    .on('postgres_changes', {event:'*', schema:'public', table:'people'}, () => reloadQuietDebounced())
     .subscribe();
+}
+let reloadTimer = null;
+function reloadQuietDebounced(){
+  clearTimeout(reloadTimer);
+  reloadTimer = setTimeout(reloadQuiet, 250);
 }
 async function reloadQuiet(){
   try{ await loadData(); connError = false; applyPersonTheme(); render(); }catch(e){ /* keep last good state */ }
@@ -513,6 +522,10 @@ function showToast(msg){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>{ toastMsg = null; render(); }, 2200);
 }
+function askConfirm(message, onConfirm){
+  confirmState = {message, onConfirm};
+  render();
+}
 function exportList(){
   const low = DATA.items.filter(i => i.min_threshold > 0 && i.quantity <= i.min_threshold);
   const lines = ['Llista de la compra'];
@@ -545,7 +558,7 @@ function render(){
     .sort((a,b) => daysUntil(effectiveExpiry(a)) - daysUntil(effectiveExpiry(b)));
 
   root.innerHTML = `
-    ${connError ? `<div class="banner">No es pot connectar amb el servidor ara mateix.</div>` : ''}
+    ${connError ? `<div class="banner">No es pot connectar amb el servidor ara mateix. <button id="retryBtn">Reintenta</button></div>` : ''}
     <div class="wrap">
       <div class="hdr">
         <div>
@@ -553,8 +566,8 @@ function render(){
           <h1 class="h-title">Rebost</h1>
         </div>
         <div style="display:flex;align-items:center;gap:10px;">
-          <button class="icon-btn" id="themeBtn" title="Canvia el tema">${theme==='dark' ? '☀' : '☾'}</button>
-          <button class="icon-btn" id="adminBtn" title="Opcions avançades">⚙</button>
+          <button class="icon-btn" id="themeBtn" title="Canvia el tema" aria-label="Canvia entre mode clar i fosc">${theme==='dark' ? '☀' : '☾'}</button>
+          <button class="icon-btn" id="adminBtn" title="Opcions avançades" aria-label="Opcions avançades">⚙</button>
           <div class="person-pill">
           <button class="person-btn" id="personBtn">
             <span class="dot" style="background:${personColor(ME)}"></span>
@@ -613,7 +626,7 @@ function render(){
               ? `<p class="side-empty">Res afegit encara.</p>`
               : DATA.extras.map(e => `
                   <div class="extra-row">
-                    <button class="extra-x" data-rmextra="${e.id}">✕</button>
+                    <button class="extra-x" data-rmextra="${e.id}" aria-label="Elimina ${esc(e.name)}">✕</button>
                     <span style="flex:1">${esc(e.name)}</span>
                     <span class="dot" style="background:${personColor(e.added_by)}"></span>
                   </div>`).join('')}
@@ -642,6 +655,7 @@ function render(){
     ${reconcileItem ? renderReconcile() : ''}
     ${adminScreen === 'password' ? renderAdminPassword() : ''}
     ${adminScreen === 'panel' ? renderAdminPanel() : ''}
+    ${confirmState ? renderConfirm() : ''}
     ${quickAddOpen ? renderQuickAdd() : ''}
     ${!modalOpen && !scannerOpen && !quickAddOpen && !reconcileItem && !adminScreen ? `<button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>` : ''}
     ${toastMsg ? `<div class="toast">${esc(toastMsg)}</div>` : ''}
@@ -696,8 +710,8 @@ function renderItemRow(i){
       <div class="qty">${i.quantity}${esc(i.unit||'')}</div>
       <button class="add-list-btn" data-addtolist="${esc(i.name)}" title="Afegeix a la llista de la compra">+ llista</button>
       <div class="stepper">
-        <button data-step="${i.id}" data-delta="-1">–</button>
-        <button data-step="${i.id}" data-delta="1">+</button>
+        <button data-step="${i.id}" data-delta="-1" aria-label="Treu una unitat">–</button>
+        <button data-step="${i.id}" data-delta="1" aria-label="Afegeix una unitat">+</button>
       </div>
     </div>
   `;
@@ -741,7 +755,7 @@ function renderModal(){
           <div class="field-row">
             <div class="field">
               <label>Quantitat</label>
-              <input type="number" step="any" id="f-qty" value="${d.quantity}" required>
+              <input type="number" step="any" min="0" id="f-qty" value="${d.quantity}" required>
             </div>
             <div class="field">
               <label>Unitat</label>
@@ -750,7 +764,7 @@ function renderModal(){
           </div>
           <div class="field">
             <label>Reposar quan arribi a</label>
-            <input type="number" step="any" id="f-min" value="${d.minThreshold}">
+            <input type="number" step="any" min="0" id="f-min" value="${d.minThreshold}">
           </div>
           <div class="field">
             <label>Tipus de data</label>
@@ -921,6 +935,8 @@ function restoreSearchFocus(){
 
 function bindEvents(){
   const personBtn = document.getElementById('personBtn');
+  const retryBtn = document.getElementById('retryBtn');
+  if(retryBtn) retryBtn.onclick = reloadQuiet;
   const themeBtn = document.getElementById('themeBtn');
   if(themeBtn) themeBtn.onclick = toggleTheme;
   const adminBtn = document.getElementById('adminBtn');
@@ -1029,7 +1045,11 @@ function bindEvents(){
   const cancelBtn = document.getElementById('cancelBtn');
   if(cancelBtn) cancelBtn.onclick = closeModal;
   const deleteBtn = document.getElementById('deleteBtn');
-  if(deleteBtn) deleteBtn.onclick = () => { const id = modalEditId; closeModal(); deleteItem(id); };
+  if(deleteBtn) deleteBtn.onclick = () => {
+    const id = modalEditId, name = modalDraft.name;
+    closeModal();
+    askConfirm(`Segur que vols eliminar "${name}"?`, () => deleteItem(id));
+  };
 
   ['f-name','f-cat','f-qty','f-unit','f-min','f-expiry','f-barcode','f-brand','f-store','f-notes','f-opened','f-shelflife'].forEach(id => {
     const el = document.getElementById(id);
@@ -1090,6 +1110,18 @@ function bindEvents(){
     if(v) applyScannedCode(v);
   };
 
+  /* ---- confirm dialog ---- */
+  const confirmOverlay = document.getElementById('confirmOverlay');
+  if(confirmOverlay) confirmOverlay.onclick = (e) => { if(e.target.id === 'confirmOverlay'){ confirmState = null; render(); } };
+  const confirmCancelBtn = document.getElementById('confirmCancelBtn');
+  if(confirmCancelBtn) confirmCancelBtn.onclick = () => { confirmState = null; render(); };
+  const confirmOkBtn = document.getElementById('confirmOkBtn');
+  if(confirmOkBtn) confirmOkBtn.onclick = () => {
+    const fn = confirmState && confirmState.onConfirm;
+    confirmState = null;
+    if(fn) fn();
+  };
+
   /* ---- admin: password gate ---- */
   const adminPassOverlay = document.getElementById('adminPassOverlay');
   if(adminPassOverlay) adminPassOverlay.onclick = (e) => { if(e.target.id === 'adminPassOverlay'){ adminScreen = null; render(); } };
@@ -1129,7 +1161,11 @@ function bindEvents(){
     };
   });
   root.querySelectorAll('[data-delperson]').forEach(b => {
-    b.onclick = () => { if(DATA.people.length <= 1){ showToast('Ha de quedar almenys un perfil.'); return; } deletePerson(b.dataset.delperson); };
+    b.onclick = () => {
+      if(DATA.people.length <= 1){ showToast('Ha de quedar almenys un perfil.'); return; }
+      const p = DATA.people.find(x => x.id === b.dataset.delperson);
+      askConfirm(`Eliminar el perfil "${p ? p.name : ''}"? Els articles i l'activitat que hi ha registrats es quedaran igual, només deixarà d'existir com a opció.`, () => deletePerson(b.dataset.delperson));
+    };
   });
   root.querySelectorAll('[data-personname]').forEach(el => {
     el.addEventListener('change', (e) => renamePerson(el.dataset.personname, e.target.value));
@@ -1151,6 +1187,20 @@ function bindEvents(){
 }
 
 function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; render(); }
+
+function renderConfirm(){
+  return `
+    <div class="overlay" id="confirmOverlay">
+      <div class="modal quick-modal" style="text-align:center;">
+        <p style="font-size:14.5px;color:var(--ink);margin:4px 0 20px;line-height:1.4;">${esc(confirmState.message)}</p>
+        <div class="modal-actions" style="justify-content:center;gap:14px;">
+          <button type="button" class="btn-ghost" id="confirmCancelBtn">Cancel·la</button>
+          <button type="button" class="btn-primary" id="confirmOkBtn" style="background:var(--brick);border-color:var(--brick);">Sí, elimina</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 function renderAdminPassword(){
   return `
@@ -1269,6 +1319,12 @@ init();
 
 if('serviceWorker' in navigator){
   window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js').catch(()=>{}); });
+  let swRefreshed = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(swRefreshed) return;
+    swRefreshed = true;
+    window.location.reload();
+  });
 }
 
 </script>
