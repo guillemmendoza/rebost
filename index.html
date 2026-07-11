@@ -56,6 +56,7 @@ input,select{font-family:inherit;}
 .wrap{max-width:920px;margin:0 auto;padding:28px 20px 80px;}
 
 .banner{background:var(--brick);color:#F7F5EF;font-size:13px;padding:10px 16px;text-align:center;}
+.banner-info{background:var(--accent-2);color:#2F2C25;}
 .banner button{background:none;border:1px solid #F7F5EF;color:#F7F5EF;border-radius:4px;padding:3px 9px;font-size:12px;margin-left:10px;}
 
 /* header */
@@ -93,6 +94,8 @@ input,select{font-family:inherit;}
 .item-sub{font-size:11px;color:var(--ink-faint);margin-top:2px;}
 .item-sub.low{color:var(--brick);}
 .item-sub.warn{color:var(--ochre);}
+.item-sub.pending{color:var(--accent-2);font-style:italic;}
+.is-pending{opacity:.7;}
 .qty{font-family:'IBM Plex Mono',monospace;font-size:13px;min-width:70px;text-align:right;}
 .stepper{display:flex;align-items:center;gap:0;flex:none;}
 .stepper button{width:24px;height:24px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:14px;line-height:1;display:flex;align-items:center;justify-content:center;}
@@ -237,6 +240,9 @@ let editingPersonId = null;
 let addingPerson = false;
 let adminColorDraft = null; // {personId, h, s, l}
 let confirmState = null; // {message, onConfirm}
+let duplicateState = null; // {existing, incoming}
+let pendingQueue = [];
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,9);
 
 const root = document.getElementById('root');
 const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -326,24 +332,85 @@ async function loadData(){
   DATA.people = people || [];
   BARCODES = {};
   (barcodes||[]).forEach(b => BARCODES[b.barcode] = b);
+  saveLocalCache();
 }
 async function logActivity(action, detail){
   try{ await sb.from('activity').insert({actor: ME, action, detail}); }catch(e){}
+}
+function saveLocalCache(){
+  try{ localStorage.setItem('rebost-cache', JSON.stringify(DATA)); }catch(e){}
+}
+function loadLocalCache(){
+  try{ const v = localStorage.getItem('rebost-cache'); return v ? JSON.parse(v) : null; }catch(e){ return null; }
+}
+function loadQueue(){
+  try{ return JSON.parse(localStorage.getItem('rebost-queue') || '[]'); }catch(e){ return []; }
+}
+function saveQueue(){
+  try{ localStorage.setItem('rebost-queue', JSON.stringify(pendingQueue)); }catch(e){}
 }
 
 async function init(){
   ME = loadPerson();
   theme = loadTheme();
   applyTheme();
+  pendingQueue = loadQueue();
   try{
     await loadData();
     connError = false;
   }catch(e){
-    connError = true;
+    const cached = loadLocalCache();
+    if(cached){ DATA = cached; connError = false; }
+    else { connError = true; }
   }
   applyPersonTheme();
   render();
   subscribeRealtime();
+  flushQueue();
+  window.addEventListener('online', flushQueue);
+  window.addEventListener('offline', render);
+  setInterval(flushQueue, 20000);
+}
+
+/* ---------- offline queue ---------- */
+
+async function tryOrQueue(table, op, data, match, localId){
+  try{
+    let q = sb.from(table);
+    let r;
+    if(op === 'insert') r = await q.insert(data);
+    else if(op === 'update') r = await q.update(data).match(match);
+    else if(op === 'delete') r = await q.delete().match(match);
+    if(r.error) throw r.error;
+    connError = false;
+    return {ok:true};
+  }catch(e){
+    pendingQueue.push({id: uid(), table, op, data, match, localId, createdAt: Date.now()});
+    saveQueue();
+    return {ok:false};
+  }
+}
+function cancelQueuedInsert(localId){
+  pendingQueue = pendingQueue.filter(q => q.localId !== localId);
+  saveQueue();
+}
+async function flushQueue(){
+  if(pendingQueue.length === 0 || !navigator.onLine) return;
+  while(pendingQueue.length > 0){
+    const item = pendingQueue[0];
+    try{
+      let q = sb.from(item.table);
+      let r;
+      if(item.op === 'insert') r = await q.insert(item.data);
+      else if(item.op === 'update') r = await q.update(item.data).match(item.match);
+      else if(item.op === 'delete') r = await q.delete().match(item.match);
+      if(r.error) throw r.error;
+      pendingQueue.shift();
+      saveQueue();
+    }catch(e){ break; }
+  }
+  try{ await loadData(); connError = false; }catch(e){}
+  render();
 }
 
 function subscribeRealtime(){
@@ -374,25 +441,37 @@ function setPerson(name){
 /* ---------- mutations ---------- */
 
 async function saveItem(fields, existingId){
-  try{
-    if(existingId){
-      await sb.from('items').update({...fields, updated_by: ME, updated_at: new Date().toISOString()}).eq('id', existingId);
-      logActivity('edita', `${fields.name} (${fields.quantity}${fields.unit||''})`);
-    }else{
-      await sb.from('items').insert({...fields, updated_by: ME, updated_at: new Date().toISOString()});
-      logActivity('afegeix article', fields.name);
-    }
+  const payload = {...fields, updated_by: ME, updated_at: new Date().toISOString()};
+  const localId = existingId || uid();
+  if(existingId){
+    const it = DATA.items.find(i=>i.id===existingId);
+    if(it) Object.assign(it, payload);
+  }else{
+    DATA.items.push({id: localId, ...payload, _pending:true});
+  }
+  render();
+  const res = existingId
+    ? await tryOrQueue('items', 'update', payload, {id: existingId})
+    : await tryOrQueue('items', 'insert', payload, null, localId);
+  if(res.ok){
+    logActivity(existingId ? 'edita' : 'afegeix article', existingId ? `${fields.name} (${fields.quantity}${fields.unit||''})` : fields.name);
     if(fields.barcode){
-      await sb.from('barcodes').upsert({barcode: fields.barcode, name: fields.name, category: fields.category, unit: fields.unit});
+      try{ await sb.from('barcodes').upsert({barcode: fields.barcode, name: fields.name, category: fields.category, unit: fields.unit}); }catch(e){}
     }
-    await loadData(); connError = false;
-  }catch(e){ connError = true; }
+    await loadData();
+  }else{
+    showToast('Sense connexió: es desarà quan torni internet.');
+  }
   render();
 }
 async function deleteItem(id){
   const it = DATA.items.find(i=>i.id===id);
-  try{ await sb.from('items').delete().eq('id', id); if(it) logActivity('elimina', it.name); await loadData(); connError = false; }
-  catch(e){ connError = true; }
+  if(it && it._pending){ cancelQueuedInsert(id); DATA.items = DATA.items.filter(i=>i.id!==id); render(); return; }
+  DATA.items = DATA.items.filter(i=>i.id!==id);
+  render();
+  const res = await tryOrQueue('items', 'delete', null, {id});
+  if(res.ok){ if(it) logActivity('elimina', it.name); await loadData(); }
+  else{ showToast('Sense connexió: s\'eliminarà quan torni internet.'); }
   render();
 }
 async function stepQty(id, delta){
@@ -400,33 +479,45 @@ async function stepQty(id, delta){
   if(!it) return;
   const newQty = Math.max(0, Math.round((it.quantity + delta) * 100) / 100);
   it.quantity = newQty; render(); // optimistic
-  try{
-    await sb.from('items').update({quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()}).eq('id', id);
-    logActivity(delta > 0 ? 'suma' : 'resta', `${it.name} → ${newQty}${it.unit||''}`);
+  if(it._pending){
+    const queued = pendingQueue.find(q => q.localId === id);
+    if(queued){ queued.data.quantity = newQty; saveQueue(); }
+    return;
   }
-  catch(e){ connError = true; render(); }
+  const payload = {quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()};
+  const res = await tryOrQueue('items', 'update', payload, {id});
+  if(res.ok) logActivity(delta > 0 ? 'suma' : 'resta', `${it.name} → ${newQty}${it.unit||''}`);
+  render();
 }
 async function reconcileQty(id, addAmount){
   const it = DATA.items.find(i=>i.id===id);
   if(!it) return;
   const newQty = Math.round((it.quantity + addAmount) * 100) / 100;
-  try{
-    await sb.from('items').update({quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()}).eq('id', id);
-    logActivity('compra reposada', `${it.name} +${addAmount}${it.unit||''} → ${newQty}${it.unit||''}`);
-    await loadData(); connError = false;
-  }catch(e){ connError = true; }
+  it.quantity = newQty; render();
+  const payload = {quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()};
+  const res = await tryOrQueue('items', 'update', payload, {id});
+  if(res.ok){ logActivity('compra reposada', `${it.name} +${addAmount}${it.unit||''} → ${newQty}${it.unit||''}`); await loadData(); }
+  else{ showToast('Sense connexió: es sincronitzarà després.'); }
   render();
 }
 async function addExtra(name){
   if(!name.trim()) return;
-  try{ await sb.from('extras').insert({name:name.trim(), added_by:ME}); logActivity('afegeix a la llista', name.trim()); await loadData(); connError=false; }
-  catch(e){ connError = true; }
+  const localId = uid();
+  DATA.extras.push({id: localId, name: name.trim(), added_by: ME, created_at: new Date().toISOString(), _pending:true});
+  render();
+  const res = await tryOrQueue('extras', 'insert', {name:name.trim(), added_by:ME}, null, localId);
+  if(res.ok){ logActivity('afegeix a la llista', name.trim()); await loadData(); }
+  else{ showToast('Sense connexió: s\'afegirà quan torni internet.'); }
   render();
 }
 async function removeExtra(id){
   const ex = DATA.extras.find(e=>e.id===id);
-  try{ await sb.from('extras').delete().eq('id', id); if(ex) logActivity('comprat', ex.name); await loadData(); connError=false; }
-  catch(e){ connError = true; }
+  if(ex && ex._pending){ cancelQueuedInsert(id); DATA.extras = DATA.extras.filter(e=>e.id!==id); render(); return; }
+  DATA.extras = DATA.extras.filter(e=>e.id!==id);
+  render();
+  const res = await tryOrQueue('extras', 'delete', null, {id});
+  if(res.ok){ if(ex) logActivity('comprat', ex.name); await loadData(); }
+  else{ showToast('Sense connexió: es sincronitzarà després.'); }
   render();
 }
 async function addShortcut(name){
@@ -434,6 +525,31 @@ async function addShortcut(name){
   try{ await sb.from('shortcuts').insert({name:name.trim()}); await loadData(); }catch(e){}
   render();
 }
+async function exportBackup(){
+  try{
+    const [items, extras, activity, shortcuts, people, barcodes] = await Promise.all([
+      sb.from('items').select('*'),
+      sb.from('extras').select('*'),
+      sb.from('activity').select('*'),
+      sb.from('shortcuts').select('*'),
+      sb.from('people').select('*'),
+      sb.from('barcodes').select('*'),
+    ]);
+    const backup = {
+      exported_at: new Date().toISOString(),
+      items: items.data, extras: extras.data, activity: activity.data,
+      shortcuts: shortcuts.data, people: people.data, barcodes: barcodes.data,
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `rebost-backup-${new Date().toISOString().slice(0,10)}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Còpia descarregada.');
+  }catch(e){ showToast('No s\'ha pogut fer la còpia (revisa la connexió).'); }
+}
+
 async function removeShortcut(id){
   try{ await sb.from('shortcuts').delete().eq('id', id); await loadData(); }catch(e){}
   render();
@@ -558,7 +674,13 @@ function render(){
     .sort((a,b) => daysUntil(effectiveExpiry(a)) - daysUntil(effectiveExpiry(b)));
 
   root.innerHTML = `
-    ${connError ? `<div class="banner">No es pot connectar amb el servidor ara mateix. <button id="retryBtn">Reintenta</button></div>` : ''}
+    ${!navigator.onLine
+      ? `<div class="banner banner-info">Sense connexió — mostrant l'última versió desada al mòbil.</div>`
+      : connError
+        ? `<div class="banner">No es pot connectar amb la base de dades. Si fa dies que ningú obre l'app, pot estar en pausa (cal reactivar-la des del panell de Supabase). <button id="retryBtn">Reintenta</button></div>`
+        : pendingQueue.length > 0
+          ? `<div class="banner banner-info">${pendingQueue.length} canvi${pendingQueue.length>1?'s':''} pendent${pendingQueue.length>1?'s':''} de sincronitzar…</div>`
+          : ''}
     <div class="wrap">
       <div class="hdr">
         <div>
@@ -625,9 +747,9 @@ function render(){
             ${DATA.extras.length === 0
               ? `<p class="side-empty">Res afegit encara.</p>`
               : DATA.extras.map(e => `
-                  <div class="extra-row">
+                  <div class="extra-row ${e._pending?'is-pending':''}">
                     <button class="extra-x" data-rmextra="${e.id}" aria-label="Elimina ${esc(e.name)}">✕</button>
-                    <span style="flex:1">${esc(e.name)}</span>
+                    <span style="flex:1">${esc(e.name)}${e._pending?' <em style="color:var(--accent-2);font-size:11px;">(pendent)</em>':''}</span>
                     <span class="dot" style="background:${personColor(e.added_by)}"></span>
                   </div>`).join('')}
             <form class="extra-form" id="extraForm">
@@ -656,6 +778,7 @@ function render(){
     ${adminScreen === 'password' ? renderAdminPassword() : ''}
     ${adminScreen === 'panel' ? renderAdminPanel() : ''}
     ${confirmState ? renderConfirm() : ''}
+    ${duplicateState ? renderDuplicate() : ''}
     ${quickAddOpen ? renderQuickAdd() : ''}
     ${!modalOpen && !scannerOpen && !quickAddOpen && !reconcileItem && !adminScreen ? `<button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>` : ''}
     ${toastMsg ? `<div class="toast">${esc(toastMsg)}</div>` : ''}
@@ -694,14 +817,15 @@ function renderItemRow(i){
   const expiringSoon = days !== null && days <= EXPIRY_WARN_DAYS;
 
   let subLine, subClass = '';
-  if(low){ subLine = `per sota del mínim (${i.min_threshold})`; subClass = 'low'; }
+  if(i._pending){ subLine = 'pendent de sincronitzar…'; subClass = 'pending'; }
+  else if(low){ subLine = `per sota del mínim (${i.min_threshold})`; subClass = 'low'; }
   else if(expiringSoon){ subLine = expiryLabel(days, i.expiry_type); subClass = days < 0 ? 'low' : 'warn'; }
   else { subLine = `${esc(i.updated_by||'')} · ${timeAgo(i.updated_at)}`; }
 
   const nameLine = i.brand ? `${esc(i.name)} <span class="item-brand">${esc(i.brand)}</span>` : esc(i.name);
 
   return `
-    <div class="item-row" data-edit="${i.id}">
+    <div class="item-row ${i._pending?'is-pending':''}" data-edit="${i.id}">
       <span class="dot" style="background:${personColor(i.updated_by)}" title="${esc(i.updated_by||'')}"></span>
       <div class="item-main">
         <div class="item-name">${nameLine}</div>
@@ -1098,6 +1222,17 @@ function bindEvents(){
       expiry_type: modalDraft.expiryType || 'caducitat',
     };
     const existingId = modalEditId;
+
+    if(!existingId){
+      const dup = DATA.items.find(x => x.category === fields.category && x.name.trim().toLowerCase() === fields.name.toLowerCase());
+      if(dup){
+        modalOpen = false;
+        duplicateState = {existing: dup, incoming: fields};
+        render();
+        return;
+      }
+    }
+
     modalOpen = false;
     saveItem(fields, existingId);
   };
@@ -1108,6 +1243,24 @@ function bindEvents(){
   if(scanManualBtn) scanManualBtn.onclick = () => {
     const v = document.getElementById('scanManualInput').value.trim();
     if(v) applyScannedCode(v);
+  };
+
+  /* ---- duplicate dialog ---- */
+  const duplicateOverlay = document.getElementById('duplicateOverlay');
+  if(duplicateOverlay) duplicateOverlay.onclick = (e) => { if(e.target.id === 'duplicateOverlay'){ duplicateState = null; render(); } };
+  const cancelDuplicateBtn = document.getElementById('cancelDuplicateBtn');
+  if(cancelDuplicateBtn) cancelDuplicateBtn.onclick = () => { duplicateState = null; render(); };
+  const mergeDuplicateBtn = document.getElementById('mergeDuplicateBtn');
+  if(mergeDuplicateBtn) mergeDuplicateBtn.onclick = () => {
+    const {existing, incoming} = duplicateState;
+    duplicateState = null;
+    reconcileQty(existing.id, incoming.quantity);
+  };
+  const createAnywayBtn = document.getElementById('createAnywayBtn');
+  if(createAnywayBtn) createAnywayBtn.onclick = () => {
+    const {incoming} = duplicateState;
+    duplicateState = null;
+    saveItem(incoming, null);
   };
 
   /* ---- confirm dialog ---- */
@@ -1141,6 +1294,8 @@ function bindEvents(){
   if(adminOverlay) adminOverlay.onclick = (e) => { if(e.target.id === 'adminOverlay'){ adminScreen = null; editingPersonId = null; adminColorDraft = null; render(); } };
   const adminCloseBtn = document.getElementById('adminCloseBtn');
   if(adminCloseBtn) adminCloseBtn.onclick = () => { adminScreen = null; editingPersonId = null; adminColorDraft = null; render(); };
+  const exportBackupBtn = document.getElementById('exportBackupBtn');
+  if(exportBackupBtn) exportBackupBtn.onclick = exportBackup;
 
   const addPersonBtn = document.getElementById('addPersonBtn');
   if(addPersonBtn) addPersonBtn.onclick = () => { addingPerson = true; render(); };
@@ -1187,6 +1342,26 @@ function bindEvents(){
 }
 
 function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; render(); }
+
+function renderDuplicate(){
+  const {existing, incoming} = duplicateState;
+  return `
+    <div class="overlay" id="duplicateOverlay">
+      <div class="modal quick-modal" style="text-align:center;">
+        <h3>Ja hi és</h3>
+        <p style="font-size:14px;color:var(--ink);margin:4px 0 20px;line-height:1.45;">
+          Ja tens <b>${esc(existing.name)}</b> a ${esc(existing.category)} (${existing.quantity}${esc(existing.unit||'')}).
+          Vols sumar-hi ${incoming.quantity}${esc(incoming.unit||'')} més, o crear-ne un article separat?
+        </p>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button type="button" class="btn-primary" id="mergeDuplicateBtn">Suma-ho a l'existent</button>
+          <button type="button" class="side-action" id="createAnywayBtn" style="padding:8px;">Crea'n un altre igualment</button>
+          <button type="button" class="btn-ghost" id="cancelDuplicateBtn">Cancel·la</button>
+        </div>
+      </div>
+    </div>
+  `;
+}
 
 function renderConfirm(){
   return `
@@ -1242,6 +1417,9 @@ function renderAdminPanel(){
         <div class="shortcut-chips">
           ${DATA.shortcuts.map(s => `<span class="chip">${esc(s.name)}<button type="button" class="chip-x" data-rmshortcut-admin="${s.id}">✕</button></span>`).join('') || `<span class="side-empty">Cap encara.</span>`}
         </div>
+
+        <p class="admin-section-title" style="margin-top:20px;">Dades</p>
+        <button type="button" class="side-action" id="exportBackupBtn">Exporta còpia de seguretat (JSON)</button>
 
         <div class="modal-actions" style="margin-top:22px;">
           <button type="button" class="btn-ghost" id="adminCloseBtn">Tanca</button>
