@@ -111,6 +111,9 @@ input,select{font-family:inherit;}
 /* sidebar */
 .side-block{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin-bottom:18px;}
 .side-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.side-collapse-toggle{display:flex;align-items:center;justify-content:space-between;width:100%;background:none;border:none;padding:0;text-align:left;}
+.side-collapse-arrow{color:var(--ink-faint);font-size:12px;transition:transform .15s ease;}
+.side-collapse-arrow.open{transform:rotate(180deg);}
 .side-title{font-family:'Fraunces',serif;font-weight:600;font-size:15px;margin:0;color:var(--accent);}
 .side-action{background:none;border:none;font-size:11px;color:var(--ink-soft);border-bottom:1px solid var(--ink-faint);padding:0;}
 .side-action:hover{color:var(--ink);border-color:var(--ink);}
@@ -213,8 +216,8 @@ input,select{font-family:inherit;}
 .slider-hue{background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);}
 
 .fab{position:fixed;bottom:22px;right:22px;background:var(--accent);color:#fff;border:none;border-radius:24px;padding:13px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 14px rgba(47,44,37,.25);z-index:40;display:flex;align-items:center;gap:7px;}
-.fab-stock{bottom:76px;background:var(--ink);}
-.fab-stock:hover{background:var(--ink);opacity:.9;}
+.fab-stock{bottom:76px;background:#25231d;color:#fff;}
+.fab-stock:hover{background:#1a1812;}
 .fab:hover{background:var(--accent-hover);}
 .fab-icon{font-size:16px;line-height:1;}
 .quick-modal{max-width:320px;}
@@ -242,6 +245,7 @@ let modalOpen = false;
 let modalDraft = null;
 let modalQuick = false;
 let buyingExtraId = null;
+let activityExpanded = false;
 let matchedCatalogKey = null;
 let catalogDropdownOpen = false;
 let modalEditId = null;
@@ -258,6 +262,8 @@ let adminUnlocked = false;
 let adminScreen = null; // null | 'password' | 'panel'
 let adminPassError = false;
 let editingPersonId = null;
+let editingCatalogKey = null;
+let catalogEditDraft = null;
 let addingPerson = false;
 let adminColorDraft = null; // {personId, h, s, l}
 let confirmState = null; // {message, onConfirm}
@@ -621,6 +627,15 @@ async function removeCatalogEntry(key){
   try{ await sb.from('catalog').delete().eq('key', key); await loadData(); }catch(e){}
   render();
 }
+async function saveCatalogEntry(oldKey, updated){
+  try{
+    await sb.from('catalog').upsert(updated);
+    if(updated.key !== oldKey){ await sb.from('catalog').delete().eq('key', oldKey); }
+    await loadData();
+    showToast('Catàleg actualitzat.');
+  }catch(e){ showToast('No s\'ha pogut desar.'); }
+  render();
+}
 
 /* ---------- admin: people ---------- */
 
@@ -838,15 +853,18 @@ function render(){
           </div>
 
           <div class="side-block">
-            <p class="side-title">Activitat recent</p>
-            ${DATA.activity.length === 0
+            <button type="button" class="side-collapse-toggle" id="activityToggle">
+              <span class="side-title" style="margin:0;">Activitat recent</span>
+              <span class="side-collapse-arrow ${activityExpanded?'open':''}">▾</span>
+            </button>
+            ${activityExpanded ? (DATA.activity.length === 0
               ? `<p class="side-empty">Res encara.</p>`
               : DATA.activity.map(a => `
                   <div class="activity-row">
                     <span class="dot" style="background:${personColor(a.actor)}"></span>
                     <span class="activity-text"><b>${esc(a.actor||'algú')}</b> ${esc(a.action)}: ${esc(a.detail)}</span>
                     <span class="activity-time">${timeAgo(a.created_at)}</span>
-                  </div>`).join('')}
+                  </div>`).join('')) : ''}
           </div>
         </div>
       </div>
@@ -1304,6 +1322,8 @@ function bindEvents(){
   });
 
   const exportBtn = document.getElementById('exportBtn');
+  const activityToggle = document.getElementById('activityToggle');
+  if(activityToggle) activityToggle.onclick = () => { activityExpanded = !activityExpanded; render(); };
   if(exportBtn) exportBtn.onclick = exportList;
 
   const fabBtn = document.getElementById('fabBtn');
@@ -1559,14 +1579,46 @@ function bindEvents(){
 
   /* ---- admin: panel ---- */
   const adminOverlay = document.getElementById('adminOverlay');
-  if(adminOverlay) adminOverlay.onclick = (e) => { if(e.target.id === 'adminOverlay'){ adminScreen = null; editingPersonId = null; adminColorDraft = null; render(); } };
+  if(adminOverlay) adminOverlay.onclick = (e) => { if(e.target.id === 'adminOverlay'){ adminScreen = null; editingPersonId = null; adminColorDraft = null; editingCatalogKey = null; catalogEditDraft = null; render(); } };
   const adminCloseBtn = document.getElementById('adminCloseBtn');
-  if(adminCloseBtn) adminCloseBtn.onclick = () => { adminScreen = null; editingPersonId = null; adminColorDraft = null; render(); };
+  if(adminCloseBtn) adminCloseBtn.onclick = () => { adminScreen = null; editingPersonId = null; adminColorDraft = null; editingCatalogKey = null; catalogEditDraft = null; render(); };
   const exportBackupBtn = document.getElementById('exportBackupBtn');
   if(exportBackupBtn) exportBackupBtn.onclick = exportBackup;
   root.querySelectorAll('[data-rmcatalog]').forEach(b => {
     b.onclick = () => removeCatalogEntry(b.dataset.rmcatalog);
   });
+  root.querySelectorAll('[data-editcatalog]').forEach(b => {
+    b.onclick = () => {
+      const entry = DATA.catalog.find(c => c.key === b.dataset.editcatalog);
+      if(!entry) return;
+      editingCatalogKey = entry.key;
+      catalogEditDraft = {name: entry.name, category: entry.category||CATS[0], brand: entry.brand||'', store: entry.store||'', unit: entry.unit||'', min_threshold: entry.min_threshold||0, expiry_type: entry.expiry_type||'caducitat', shelf_life_days: entry.shelf_life_days||''};
+      render();
+    };
+  });
+  const cancelCatalogEditBtn = document.getElementById('cancelCatalogEditBtn');
+  if(cancelCatalogEditBtn) cancelCatalogEditBtn.onclick = () => { editingCatalogKey = null; catalogEditDraft = null; render(); };
+  const catalogEditForm = document.getElementById('catalogEditForm');
+  if(catalogEditForm) catalogEditForm.onsubmit = (e) => {
+    e.preventDefault();
+    const oldKey = catalogEditForm.dataset.catkey;
+    const name = document.getElementById('ce-name').value.trim();
+    if(!name) return;
+    const updated = {
+      key: name.toLowerCase(),
+      name,
+      category: document.getElementById('ce-cat').value,
+      brand: document.getElementById('ce-brand').value.trim() || null,
+      store: document.getElementById('ce-store').value.trim() || null,
+      unit: document.getElementById('ce-unit').value.trim() || null,
+      min_threshold: parseFloat(document.getElementById('ce-min').value) || 0,
+      expiry_type: document.getElementById('ce-expirytype').value,
+      shelf_life_days: document.getElementById('ce-shelflife').value ? parseInt(document.getElementById('ce-shelflife').value, 10) : null,
+      updated_at: new Date().toISOString(),
+    };
+    editingCatalogKey = null; catalogEditDraft = null;
+    saveCatalogEntry(oldKey, updated);
+  };
 
   const addPersonBtn = document.getElementById('addPersonBtn');
   if(addPersonBtn) addPersonBtn.onclick = () => { addingPerson = true; render(); };
@@ -1693,15 +1745,11 @@ function renderAdminPanel(){
         <button type="button" class="side-action" id="exportBackupBtn">Exporta còpia de seguretat (JSON)</button>
 
         <p class="admin-section-title" style="margin-top:20px;">Catàleg de productes (${DATA.catalog.length})</p>
-        <p style="font-size:11px;color:var(--ink-faint);margin:-4px 0 8px;">Tot el que s'ha escrit alguna vegada, fet servir per l'autocompletar. Elimina'n una entrada si té dades errònies.</p>
+        <p style="font-size:11px;color:var(--ink-faint);margin:-4px 0 8px;">Tot el que s'ha escrit alguna vegada, fet servir per l'autocompletar. Edita o elimina una entrada si té dades errònies.</p>
         <div class="catalog-admin-list">
           ${DATA.catalog.length === 0
             ? `<p class="side-empty">Encara no hi ha res.</p>`
-            : DATA.catalog.map(c => `
-                <div class="catalog-admin-row">
-                  <span class="catalog-admin-name">${esc(c.name)}<span class="catalog-option-cat">${esc(c.category||'')}${c.brand?' · '+esc(c.brand):''}</span></span>
-                  <button type="button" class="chip-x" data-rmcatalog="${esc(c.key)}" title="Elimina del catàleg">✕</button>
-                </div>`).join('')}
+            : DATA.catalog.map(c => renderCatalogAdminRow(c)).join('')}
         </div>
 
         <div class="modal-actions" style="margin-top:22px;">
@@ -1711,6 +1759,53 @@ function renderAdminPanel(){
       </div>
     </div>
   `;
+}
+
+function renderCatalogAdminRow(c){
+  const isEditing = editingCatalogKey === c.key;
+  if(!isEditing){
+    return `
+      <div class="catalog-admin-row">
+        <span class="catalog-admin-name">${esc(c.name)}<span class="catalog-option-cat">${esc(c.category||'')}${c.brand?' · '+esc(c.brand):''}</span></span>
+        <span style="display:flex;gap:6px;flex:none;">
+          <button type="button" class="side-action" data-editcatalog="${esc(c.key)}">edita</button>
+          <button type="button" class="chip-x" data-rmcatalog="${esc(c.key)}" title="Elimina del catàleg">✕</button>
+        </span>
+      </div>`;
+  }
+  const d = catalogEditDraft || {};
+  return `
+    <div class="catalog-admin-row" style="flex-direction:column;align-items:stretch;">
+      <form id="catalogEditForm" data-catkey="${esc(c.key)}" style="width:100%;">
+        <div class="field-row">
+          <div class="field"><label>Nom</label><input type="text" id="ce-name" value="${esc(d.name)}"></div>
+          <div class="field"><label>Categoria</label>
+            <select id="ce-cat">${CATS.map(cat=>`<option value="${cat}" ${cat===d.category?'selected':''}>${cat}</option>`).join('')}</select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Marca</label><input type="text" id="ce-brand" value="${esc(d.brand)}"></div>
+          <div class="field"><label>On es compra</label><input type="text" id="ce-store" value="${esc(d.store)}"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Unitat</label><input type="text" id="ce-unit" value="${esc(d.unit)}" placeholder="uds, kg, L…"></div>
+          <div class="field"><label>Mínim</label><input type="number" step="any" min="0" id="ce-min" value="${d.min_threshold||0}"></div>
+        </div>
+        <div class="field-row">
+          <div class="field"><label>Tipus de data</label>
+            <select id="ce-expirytype">
+              <option value="caducitat" ${d.expiry_type!=='consum_preferent'?'selected':''}>Caducitat</option>
+              <option value="consum_preferent" ${d.expiry_type==='consum_preferent'?'selected':''}>Consum preferent</option>
+            </select>
+          </div>
+          <div class="field"><label>Dura un cop obert (dies)</label><input type="number" step="1" min="0" id="ce-shelflife" value="${esc(d.shelf_life_days)}"></div>
+        </div>
+        <div class="modal-actions" style="margin-top:6px;">
+          <button type="button" class="btn-ghost" id="cancelCatalogEditBtn">Cancel·la</button>
+          <button type="submit" class="btn-primary" style="padding:8px 14px;">Desa</button>
+        </div>
+      </form>
+    </div>`;
 }
 
 function renderAdminPersonRow(p){
