@@ -245,8 +245,6 @@ let adminColorDraft = null; // {personId, h, s, l}
 let confirmState = null; // {message, onConfirm}
 let duplicateState = null; // {existing, incoming}
 let pendingQueue = [];
-let aiSuggestions = [];
-let dismissedAI = [];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,9);
 
 const root = document.getElementById('root');
@@ -356,41 +354,6 @@ function saveQueue(){
   try{ localStorage.setItem('rebost-queue', JSON.stringify(pendingQueue)); }catch(e){}
 }
 
-function loadAICache(){
-  try{
-    const raw = localStorage.getItem('rebost-ai-suggestions');
-    if(!raw) return null;
-    const parsed = JSON.parse(raw);
-    const today = new Date().toISOString().slice(0,10);
-    return parsed.date === today ? parsed.items : null;
-  }catch(e){ return null; }
-}
-function saveAICache(items){
-  try{ localStorage.setItem('rebost-ai-suggestions', JSON.stringify({date: new Date().toISOString().slice(0,10), items})); }catch(e){}
-}
-async function fetchAISuggestions(){
-  try{
-    const known = DATA.items.map(i => i.name).join(', ') || '(cap article encara)';
-    const prompt = `Aquest és l'inventari actual d'un rebost de casa (Nevera/Congelador/Rebost): ${known}.
-Dona'm com a màxim 6 productes bàsics i habituals d'una llar catalana normal que probablement falten, tenint en compte el que ja hi ha (no repeteixis res que ja hi sigui, encara que estigui escrit diferent).
-Respon NOMÉS amb un array JSON de strings en català, sense cap altre text ni explicació. Exemple de format: ["Pa", "Ous", "Oli d'oliva"]`;
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 300, messages: [{role:'user', content: prompt}] })
-    });
-    const data = await res.json();
-    const text = (data.content || []).map(b => b.text || '').join('').trim();
-    const clean = text.replace(/```json|```/g, '').trim();
-    const arr = JSON.parse(clean);
-    if(Array.isArray(arr)){
-      aiSuggestions = arr.filter(s => typeof s === 'string').slice(0, 6);
-      saveAICache(aiSuggestions);
-      render();
-    }
-  }catch(e){ /* sense suggeriments IA disponibles, no passa res */ }
-}
-
 async function init(){
   ME = loadPerson();
   theme = loadTheme();
@@ -405,8 +368,6 @@ async function init(){
     else { connError = true; }
   }
   applyPersonTheme();
-  const cachedAI = loadAICache();
-  if(cachedAI) aiSuggestions = cachedAI; else fetchAISuggestions();
   render();
   subscribeRealtime();
   flushQueue();
@@ -574,38 +535,11 @@ async function removeExtraPlain(id){
   else{ showToast('Sense connexió: es sincronitzarà després.'); }
   render();
 }
-async function aiFindMatch(name){
-  try{
-    const known = DATA.items.map(i => i.name);
-    if(known.length === 0) return null;
-    const prompt = `Tinc aquest producte a la llista de la compra: "${name}". Aquests són els articles que ja tinc a l'inventari: ${JSON.stringify(known)}.
-Si "${name}" es refereix quasi segur al mateix producte real que un d'aquests (no només similar — han de ser intercanviables de veritat), respon NOMÉS amb el nom exacte tal com surt a la llista.
-Si no n'hi ha cap que sigui clarament el mateix producte (per exemple "Aigua" i "Aigua mineral" NO són el mateix producte), respon NOMÉS amb la paraula CAP.`;
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 60, messages: [{role:'user', content:prompt}] })
-    });
-    const data = await res.json();
-    const text = (data.content || []).map(b => b.text || '').join('').trim();
-    if(!text || text.toUpperCase().includes('CAP')) return null;
-    const clean = text.replace(/["'.]/g,'').trim();
-    return known.find(n => n.toLowerCase() === clean.toLowerCase()) || null;
-  }catch(e){ return null; }
-}
 async function removeExtra(id){
   const ex = DATA.extras.find(e=>e.id===id);
   if(!ex) return;
   const exact = DATA.items.find(i => i.name.toLowerCase() === ex.name.toLowerCase());
   if(exact){ reconcileItem = exact.id; render(); return; }
-
-  const guessName = await aiFindMatch(ex.name);
-  if(guessName){
-    const guessed = DATA.items.find(i => i.name.toLowerCase() === guessName.toLowerCase());
-    if(guessed){
-      askConfirm(`"${ex.name}" i "${guessed.name}" semblen el mateix producte. Vols actualitzar l'estoc de "${guessed.name}" en comptes de treure'l sense més?`, () => { reconcileItem = guessed.id; render(); }, 'Sí, actualitza', 'var(--accent)');
-      return;
-    }
-  }
   removeExtraPlain(id);
 }
 async function addShortcut(name){
@@ -757,11 +691,6 @@ function render(){
 
   const term = searchTerm.trim().toLowerCase();
   const lowStock = DATA.items.filter(i => i.quantity === 0 || (i.min_threshold > 0 && i.quantity <= i.min_threshold));
-  const aiToShow = aiSuggestions.filter(name =>
-    !dismissedAI.includes(name.toLowerCase()) &&
-    !DATA.items.some(i => i.name.toLowerCase() === name.toLowerCase()) &&
-    !DATA.extras.some(e => e.name.toLowerCase() === name.toLowerCase())
-  );
   const expiringSoon = DATA.items
     .filter(i => effectiveExpiry(i) && daysUntil(effectiveExpiry(i)) <= EXPIRY_WARN_DAYS)
     .sort((a,b) => daysUntil(effectiveExpiry(a)) - daysUntil(effectiveExpiry(b)));
@@ -819,11 +748,8 @@ function render(){
           </div>
 
           <div class="side-block">
-            <div class="side-hdr">
-              <p class="side-title">Suggeriments</p>
-              <button class="side-action" id="refreshAiBtn" title="Torna a demanar suggeriments">↻ actualitza</button>
-            </div>
-            ${(lowStock.length === 0 && aiToShow.length === 0)
+            <p class="side-title">Suggeriments</p>
+            ${lowStock.length === 0
               ? `<p class="side-empty">Res a suggerir ara mateix.</p>`
               : ''}
             ${lowStock.map(i => `
@@ -833,14 +759,6 @@ function render(){
                       <span class="buy-tag">${i.quantity}${esc(i.unit||'')}${i.min_threshold>0 ? ` / mín ${i.min_threshold}` : ''}</span>
                       <button class="side-action" data-addtolist="${esc(i.name)}">+ llista</button>
                       <button class="side-action" data-reconcile="${i.id}">Comprat</button>
-                    </span>
-                  </div>`).join('')}
-            ${aiToShow.map(name => `
-                  <div class="buy-row">
-                    <span class="buy-name">${esc(name)}<span class="suggest-tag ai">bàsic habitual</span></span>
-                    <span style="display:flex;align-items:center;gap:6px;">
-                      <button class="side-action" data-addtolist="${esc(name)}">+ llista</button>
-                      <button class="side-action" data-dismissai="${esc(name)}">Ignora</button>
                     </span>
                   </div>`).join('')}
           </div>
@@ -1221,11 +1139,6 @@ function bindEvents(){
 
   const exportBtn = document.getElementById('exportBtn');
   if(exportBtn) exportBtn.onclick = exportList;
-  const refreshAiBtn = document.getElementById('refreshAiBtn');
-  if(refreshAiBtn) refreshAiBtn.onclick = () => { showToast('Actualitzant suggeriments…'); fetchAISuggestions(); };
-  root.querySelectorAll('[data-dismissai]').forEach(b => {
-    b.onclick = () => { dismissedAI.push(b.dataset.dismissai.toLowerCase()); render(); };
-  });
 
   const fabBtn = document.getElementById('fabBtn');
   if(fabBtn) fabBtn.onclick = () => { quickAddOpen = true; render(); };
