@@ -538,8 +538,14 @@ async function reconcileQty(id, addAmount){
   it.quantity = newQty; render();
   const payload = {quantity:newQty, updated_by:ME, updated_at:new Date().toISOString()};
   const res = await tryOrQueue('items', 'update', payload, {id});
-  if(res.ok){ logActivity('compra reposada', `${it.name} +${addAmount}${it.unit||''} → ${newQty}${it.unit||''}`); await loadData(); }
-  else{ showToast('Sense connexió: es sincronitzarà després.'); }
+  if(res.ok){
+    logActivity('compra reposada', `${it.name} +${addAmount}${it.unit||''} → ${newQty}${it.unit||''}`);
+    const matching = DATA.extras.filter(e => e.name.toLowerCase() === it.name.toLowerCase());
+    for(const ex of matching){ await removeExtraPlain(ex.id); }
+    await loadData();
+  }else{
+    showToast('Sense connexió: es sincronitzarà després.');
+  }
   render();
 }
 async function addExtra(name){
@@ -552,7 +558,7 @@ async function addExtra(name){
   else{ showToast('Sense connexió: s\'afegirà quan torni internet.'); }
   render();
 }
-async function removeExtra(id){
+async function removeExtraPlain(id){
   const ex = DATA.extras.find(e=>e.id===id);
   if(ex && ex._pending){ cancelQueuedInsert(id); DATA.extras = DATA.extras.filter(e=>e.id!==id); render(); return; }
   DATA.extras = DATA.extras.filter(e=>e.id!==id);
@@ -561,6 +567,18 @@ async function removeExtra(id){
   if(res.ok){ if(ex) logActivity('comprat', ex.name); await loadData(); }
   else{ showToast('Sense connexió: es sincronitzarà després.'); }
   render();
+}
+async function removeExtra(id){
+  const ex = DATA.extras.find(e=>e.id===id);
+  if(!ex) return;
+  const match = DATA.items.find(i => i.name.toLowerCase() === ex.name.toLowerCase());
+  if(match){
+    // coincideix amb un article de l'estoc: ho tractem com "comprat" i actualitzem la quantitat
+    reconcileItem = match.id;
+    render();
+    return;
+  }
+  removeExtraPlain(id);
 }
 async function addShortcut(name){
   if(!name.trim()) return;
