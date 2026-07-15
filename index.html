@@ -520,6 +520,23 @@ async function stepQty(id, delta){
   const it = DATA.items.find(i=>i.id===id);
   if(!it) return;
   const newQty = Math.max(0, Math.round((it.quantity + delta) * 100) / 100);
+
+  if(newQty === 0 && delta < 0){
+    const name = it.name;
+    if(it._pending){
+      cancelQueuedInsert(id);
+      DATA.items = DATA.items.filter(i=>i.id!==id);
+    }else{
+      DATA.items = DATA.items.filter(i=>i.id!==id);
+      render();
+      const res = await tryOrQueue('items', 'delete', null, {id});
+      if(res.ok) logActivity('s\'ha acabat', name);
+      else showToast('Sense connexió: s\'eliminarà quan torni internet.');
+    }
+    await addExtra(name);
+    return;
+  }
+
   it.quantity = newQty; render(); // optimistic
   if(it._pending){
     const queued = pendingQueue.find(q => q.localId === id);
