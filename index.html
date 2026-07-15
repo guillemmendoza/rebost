@@ -120,7 +120,7 @@ input,select{font-family:inherit;}
 .buy-name{cursor:pointer;display:flex;flex-direction:column;line-height:1.35;}
 .buy-store{font-size:11px;color:var(--ink-faint);font-weight:400;}
 .suggest-tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--brick);margin-top:2px;}
-.suggest-tag.ai{color:var(--accent-2);}
+.suggest-tag.recurring{color:var(--accent-2);}
 .buy-name:hover{text-decoration:underline;}
 .buy-tag{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--brick);white-space:nowrap;}
 .buy-tag.warn{color:var(--ochre);}
@@ -220,7 +220,7 @@ const DEFAULT_ACCENT = '#2F6B4F';
 const EXPIRY_WARN_DAYS = 5;
 const ADMIN_PASSWORD = 'guillem';
 
-let DATA = {items:[], extras:[], activity:[], shortcuts:[], people:[]};
+let DATA = {items:[], extras:[], activity:[], shortcuts:[], people:[], recurring:[]};
 let BARCODES = {};
 let ME = null;
 let theme = 'light';
@@ -320,13 +320,14 @@ function savePerson(name){
 }
 
 async function loadData(){
-  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}, {data: activity}, {data: shortcuts}, {data: people}] = await Promise.all([
+  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}, {data: activity}, {data: shortcuts}, {data: people}, {data: history}] = await Promise.all([
     sb.from('items').select('*').order('name'),
     sb.from('extras').select('*').order('created_at'),
     sb.from('barcodes').select('*'),
     sb.from('activity').select('*').order('created_at', {ascending:false}).limit(15),
     sb.from('shortcuts').select('*').order('name'),
-    sb.from('people').select('*').order('sort_order')
+    sb.from('people').select('*').order('sort_order'),
+    sb.from('activity').select('action,detail').in('action', ['elimina','comprat','compra reposada']).order('created_at', {ascending:false}).limit(300)
   ]);
   if(e1 || e2) throw (e1 || e2);
   DATA.items = items || [];
@@ -334,9 +335,28 @@ async function loadData(){
   DATA.activity = activity || [];
   DATA.shortcuts = shortcuts || [];
   DATA.people = people || [];
+  DATA.recurring = computeRecurring(history || []);
   BARCODES = {};
   (barcodes||[]).forEach(b => BARCODES[b.barcode] = b);
   saveLocalCache();
+}
+function computeRecurring(history){
+  const counts = {};
+  for(const a of history){
+    let name = a.detail || '';
+    if(a.action === 'compra reposada'){
+      const idx = name.indexOf(' +');
+      if(idx > -1) name = name.slice(0, idx);
+    }
+    name = name.trim();
+    if(!name) continue;
+    const key = name.toLowerCase();
+    if(!counts[key]) counts[key] = {name, count: 0};
+    counts[key].count++;
+  }
+  return Object.values(counts)
+    .filter(c => c.count >= 2)
+    .sort((a,b) => b.count - a.count);
 }
 async function logActivity(action, detail){
   try{ await sb.from('activity').insert({actor: ME, action, detail}); }catch(e){}
@@ -691,6 +711,10 @@ function render(){
 
   const term = searchTerm.trim().toLowerCase();
   const lowStock = DATA.items.filter(i => i.quantity === 0 || (i.min_threshold > 0 && i.quantity <= i.min_threshold));
+  const recurringToShow = DATA.recurring.filter(r =>
+    !DATA.items.some(i => i.name.toLowerCase() === r.name.toLowerCase()) &&
+    !DATA.extras.some(e => e.name.toLowerCase() === r.name.toLowerCase())
+  ).slice(0, 6);
   const expiringSoon = DATA.items
     .filter(i => effectiveExpiry(i) && daysUntil(effectiveExpiry(i)) <= EXPIRY_WARN_DAYS)
     .sort((a,b) => daysUntil(effectiveExpiry(a)) - daysUntil(effectiveExpiry(b)));
@@ -749,7 +773,7 @@ function render(){
 
           <div class="side-block">
             <p class="side-title">Suggeriments</p>
-            ${lowStock.length === 0
+            ${(lowStock.length === 0 && recurringToShow.length === 0)
               ? `<p class="side-empty">Res a suggerir ara mateix.</p>`
               : ''}
             ${lowStock.map(i => `
@@ -760,6 +784,11 @@ function render(){
                       <button class="side-action" data-addtolist="${esc(i.name)}">+ llista</button>
                       <button class="side-action" data-reconcile="${i.id}">Comprat</button>
                     </span>
+                  </div>`).join('')}
+            ${recurringToShow.map(r => `
+                  <div class="buy-row">
+                    <span class="buy-name">${esc(r.name)}<span class="suggest-tag recurring">es compra sovint</span></span>
+                    <button class="side-action" data-addtolist="${esc(r.name)}">+ llista</button>
                   </div>`).join('')}
           </div>
 
