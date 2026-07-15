@@ -157,7 +157,15 @@ input,select{font-family:inherit;}
 .field input,.field select{width:100%;border:1px solid var(--line);border-radius:4px;padding:8px 9px;font-size:14px;background:var(--bg);color:var(--ink);}
 .field-row{display:flex;gap:10px;}
 .field-row .field{flex:1;}
-.barcode-row{display:flex;gap:6px;}
+.barcode-row{display:flex;gap:6px;align-items:center;}
+.quick-add-modal .icon-btn{width:38px;height:38px;font-size:16px;flex:none;}
+.quick-match-info{font-size:11.5px;color:var(--ink-soft);margin:-8px 0 12px;}
+.quick-match-info.new{color:var(--accent-2);font-style:italic;}
+.catalog-dropdown{position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--line);border-radius:6px;margin-top:4px;max-height:180px;overflow-y:auto;z-index:10;box-shadow:0 4px 14px rgba(47,44,37,.14);}
+.catalog-option{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;padding:9px 11px;border:none;background:none;font-size:13px;color:var(--ink);border-bottom:1px solid var(--line);}
+.catalog-option:last-child{border-bottom:none;}
+.catalog-option:hover{background:var(--surface-2);}
+.catalog-option-cat{font-size:10px;color:var(--ink-faint);text-transform:uppercase;letter-spacing:.03em;}
 .barcode-row input{flex:1;}
 .scan-btn{border:1px solid var(--line);background:var(--surface-2);color:var(--ink);border-radius:4px;padding:0 10px;font-size:12px;white-space:nowrap;}
 .scan-btn:hover{background:var(--line);}
@@ -220,12 +228,15 @@ const DEFAULT_ACCENT = '#2F6B4F';
 const EXPIRY_WARN_DAYS = 5;
 const ADMIN_PASSWORD = 'guillem';
 
-let DATA = {items:[], extras:[], activity:[], shortcuts:[], people:[], recurring:[]};
+let DATA = {items:[], extras:[], activity:[], shortcuts:[], people:[], recurring:[], catalog:[]};
 let BARCODES = {};
 let ME = null;
 let theme = 'light';
 let modalOpen = false;
 let modalDraft = null;
+let modalQuick = false;
+let matchedCatalogKey = null;
+let catalogDropdownOpen = false;
 let modalEditId = null;
 let personMenuOpen = false;
 let searchTerm = '';
@@ -320,14 +331,15 @@ function savePerson(name){
 }
 
 async function loadData(){
-  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}, {data: activity}, {data: shortcuts}, {data: people}, {data: history}] = await Promise.all([
+  const [{data: items, error: e1}, {data: extras, error: e2}, {data: barcodes}, {data: activity}, {data: shortcuts}, {data: people}, {data: history}, {data: catalog}] = await Promise.all([
     sb.from('items').select('*').order('name'),
     sb.from('extras').select('*').order('created_at'),
     sb.from('barcodes').select('*'),
     sb.from('activity').select('*').order('created_at', {ascending:false}).limit(15),
     sb.from('shortcuts').select('*').order('name'),
     sb.from('people').select('*').order('sort_order'),
-    sb.from('activity').select('action,detail').in('action', ['elimina','comprat','compra reposada']).order('created_at', {ascending:false}).limit(300)
+    sb.from('activity').select('action,detail').in('action', ['elimina','comprat','compra reposada']).order('created_at', {ascending:false}).limit(300),
+    sb.from('catalog').select('*').order('name')
   ]);
   if(e1 || e2) throw (e1 || e2);
   DATA.items = items || [];
@@ -336,6 +348,7 @@ async function loadData(){
   DATA.shortcuts = shortcuts || [];
   DATA.people = people || [];
   DATA.recurring = computeRecurring(history || []);
+  DATA.catalog = catalog || [];
   BARCODES = {};
   (barcodes||[]).forEach(b => BARCODES[b.barcode] = b);
   saveLocalCache();
@@ -482,6 +495,14 @@ async function saveItem(fields, existingId){
     if(fields.barcode){
       try{ await sb.from('barcodes').upsert({barcode: fields.barcode, name: fields.name, category: fields.category, unit: fields.unit}); }catch(e){}
     }
+    try{
+      await sb.from('catalog').upsert({
+        key: fields.name.toLowerCase(), name: fields.name, category: fields.category,
+        brand: fields.brand, store: fields.store, unit: fields.unit,
+        min_threshold: fields.min_threshold, expiry_type: fields.expiry_type,
+        shelf_life_days: fields.shelf_life_days, updated_at: new Date().toISOString()
+      });
+    }catch(e){}
     await loadData();
   }else{
     showToast('Sense connexió: es desarà quan torni internet.');
@@ -894,7 +915,66 @@ function renderItemRow(i){
   `;
 }
 
+function renderQuickAddForm(){
+  const d = modalDraft;
+  const typed = d.name.trim().toLowerCase();
+  const matched = typed ? DATA.catalog.find(c => c.key === typed) : null;
+  const suggestions = typed
+    ? DATA.catalog.filter(c => c.key.includes(typed) && c.key !== typed).slice(0, 6)
+    : DATA.catalog.slice(0, 8);
+
+  let infoLine = '';
+  if(matched){
+    const bits = [`va a ${esc(matched.category||d.category)}`];
+    if(matched.brand) bits.push(esc(matched.brand));
+    infoLine = `<p class="quick-match-info">Ja el coneixem: ${bits.join(' · ')}</p>`;
+  } else if(typed){
+    infoLine = `<p class="quick-match-info new">Producte nou → es guardarà a ${esc(d.category)}</p>`;
+  }
+
+  return `
+    <div class="overlay" id="overlay">
+      <div class="modal quick-add-modal">
+        <h3>Afegeix a ${esc(d.category)}</h3>
+        <form id="quickItemForm">
+          <div class="field" style="position:relative;">
+            <label>Producte</label>
+            <div class="barcode-row">
+              <input type="text" id="qf-name" value="${esc(d.name)}" autocomplete="off" placeholder="Nom del producte" required>
+              <button type="button" class="icon-btn" id="qSearchBtn" title="Cerca al catàleg">🔍</button>
+              <button type="button" class="icon-btn" id="scanBtn" title="Escaneja codi de barres">📷</button>
+            </div>
+            ${catalogDropdownOpen && suggestions.length ? `
+              <div class="catalog-dropdown">
+                ${suggestions.map(c => `<button type="button" class="catalog-option" data-pickcatalog="${esc(c.key)}">${esc(c.name)}<span class="catalog-option-cat">${esc(c.category||'')}</span></button>`).join('')}
+              </div>` : ''}
+          </div>
+          ${infoLine}
+          <div class="field-row">
+            <div class="field">
+              <label>Quantitat</label>
+              <input type="number" step="any" min="0" id="qf-qty" value="${d.quantity}" required>
+            </div>
+            <div class="field">
+              <label>Caducitat (opcional)</label>
+              <input type="date" id="qf-expiry" value="${esc(d.expiryDate)}">
+            </div>
+          </div>
+          <div class="modal-actions">
+            <span></span>
+            <div style="display:flex;gap:14px;align-items:center;">
+              <button type="button" class="btn-ghost" id="cancelBtn">Cancel·la</button>
+              <button type="submit" class="btn-primary">Afegeix</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+}
+
 function renderModal(){
+  if(modalQuick) return renderQuickAddForm();
   const isNew = modalEditId === null;
   const d = modalDraft;
   return `
@@ -1137,7 +1217,7 @@ function bindEvents(){
   root.querySelectorAll('[data-newcat]').forEach(b => {
     b.onclick = () => {
       modalDraft = {name:'', category:b.dataset.newcat, quantity:1, unit:'', minThreshold:0, expiryDate:'', barcode:'', brand:'', store:'', notes:'', openedDate:'', shelfLifeDays:'', expiryType:'caducitat'};
-      modalEditId = null; modalOpen = true; render();
+      modalEditId = null; modalQuick = true; matchedCatalogKey = null; catalogDropdownOpen = false; modalOpen = true; render();
     };
   });
   root.querySelectorAll('[data-edit]').forEach(el => {
@@ -1147,7 +1227,7 @@ function bindEvents(){
       const it = DATA.items.find(i=>i.id===id);
       if(it){
         modalDraft = {name:it.name, category:it.category, quantity:it.quantity, unit:it.unit||'', minThreshold:it.min_threshold, expiryDate:it.expiry_date||'', barcode:it.barcode||'', brand:it.brand||'', store:it.store||'', notes:it.notes||'', openedDate:it.opened_date||'', shelfLifeDays:it.shelf_life_days||'', expiryType:it.expiry_type||'caducitat'};
-        modalEditId = id; modalOpen = true; render();
+        modalEditId = id; modalQuick = false; modalOpen = true; render();
       }
     };
   });
@@ -1256,6 +1336,68 @@ function bindEvents(){
 
   const scanBtn = document.getElementById('scanBtn');
   if(scanBtn) scanBtn.onclick = openScanner;
+
+  const qfName = document.getElementById('qf-name');
+  if(qfName){
+    qfName.addEventListener('input', (e) => {
+      modalDraft.name = e.target.value;
+      catalogDropdownOpen = true;
+      render();
+    });
+    qfName.addEventListener('blur', () => {
+      setTimeout(() => { catalogDropdownOpen = false; render(); }, 150);
+    });
+  }
+  const qSearchBtn = document.getElementById('qSearchBtn');
+  if(qSearchBtn) qSearchBtn.onclick = () => {
+    catalogDropdownOpen = true;
+    render();
+    document.getElementById('qf-name')?.focus();
+  };
+  root.querySelectorAll('[data-pickcatalog]').forEach(b => {
+    b.onmousedown = (e) => e.preventDefault(); // evita que el blur tanqui el desplegable abans del clic
+    b.onclick = () => {
+      const entry = DATA.catalog.find(c => c.key === b.dataset.pickcatalog);
+      if(entry) modalDraft.name = entry.name;
+      catalogDropdownOpen = false;
+      render();
+    };
+  });
+  const qfQty = document.getElementById('qf-qty');
+  if(qfQty) qfQty.addEventListener('input', (e) => { modalDraft.quantity = parseFloat(e.target.value) || 0; });
+  const qfExpiry = document.getElementById('qf-expiry');
+  if(qfExpiry) qfExpiry.addEventListener('input', (e) => { modalDraft.expiryDate = e.target.value; });
+
+  const quickItemForm = document.getElementById('quickItemForm');
+  if(quickItemForm) quickItemForm.onsubmit = (e) => {
+    e.preventDefault();
+    if(!modalDraft.name.trim()) return;
+    const matched = DATA.catalog.find(c => c.key === modalDraft.name.trim().toLowerCase());
+    const fields = {
+      name: modalDraft.name.trim(),
+      category: (matched && matched.category) || modalDraft.category,
+      quantity: modalDraft.quantity,
+      unit: (matched && matched.unit) || '',
+      min_threshold: (matched && matched.min_threshold != null) ? matched.min_threshold : 0,
+      expiry_date: modalDraft.expiryDate || null,
+      barcode: modalDraft.barcode.trim() || null,
+      brand: (matched && matched.brand) || null,
+      store: (matched && matched.store) || null,
+      notes: null,
+      opened_date: null,
+      shelf_life_days: (matched && matched.shelf_life_days) || null,
+      expiry_type: (matched && matched.expiry_type) || 'caducitat',
+    };
+    const dup = DATA.items.find(x => x.category === fields.category && x.name.trim().toLowerCase() === fields.name.toLowerCase());
+    if(dup){
+      modalOpen = false;
+      duplicateState = {existing: dup, incoming: fields};
+      render();
+      return;
+    }
+    modalOpen = false;
+    saveItem(fields, null);
+  };
 
   const itemForm = document.getElementById('itemForm');
   if(itemForm) itemForm.onsubmit = (e) => {
@@ -1396,7 +1538,7 @@ function bindEvents(){
   });
 }
 
-function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; render(); }
+function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; modalQuick = false; matchedCatalogKey = null; catalogDropdownOpen = false; render(); }
 
 function renderDuplicate(){
   const {existing, incoming} = duplicateState;
