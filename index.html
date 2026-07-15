@@ -244,7 +244,6 @@ let addingPerson = false;
 let adminColorDraft = null; // {personId, h, s, l}
 let confirmState = null; // {message, onConfirm}
 let duplicateState = null; // {existing, incoming}
-let moveFromExtraId = null;
 let pendingQueue = [];
 let aiSuggestions = [];
 let dismissedAI = [];
@@ -853,16 +852,12 @@ function render(){
             </div>
             ${DATA.extras.length === 0
               ? `<p class="side-empty">Res a la llista encara.</p>`
-              : DATA.extras.map(e => {
-                  const alreadyTracked = DATA.items.some(i => i.name.toLowerCase() === e.name.toLowerCase());
-                  return `
+              : DATA.extras.map(e => `
                   <div class="extra-row ${e._pending?'is-pending':''}">
                     <button class="extra-x" data-rmextra="${e.id}" aria-label="Treu ${esc(e.name)} de la llista">✕</button>
                     <span style="flex:1">${esc(e.name)}${e._pending?' <em style="color:var(--accent-2);font-size:11px;">(pendent)</em>':''}</span>
-                    ${!alreadyTracked ? `<button class="side-action" data-movetostock="${e.id}" title="Converteix en article de l'estoc">→ estoc</button>` : ''}
                     <span class="dot" style="background:${personColor(e.added_by)}"></span>
-                  </div>`;
-                }).join('')}
+                  </div>`).join('')}
             <form class="extra-form" id="extraForm">
               <input type="text" placeholder="p. ex. paper de vàter" id="extraInput" autocomplete="off">
               <button type="submit">Afegeix</button>
@@ -1223,18 +1218,6 @@ function bindEvents(){
   root.querySelectorAll('[data-rmextra]').forEach(b => {
     b.onclick = () => removeExtra(b.dataset.rmextra);
   });
-  root.querySelectorAll('[data-movetostock]').forEach(b => {
-    b.onclick = () => {
-      const extraId = b.dataset.movetostock;
-      const ex = DATA.extras.find(e => e.id === extraId);
-      if(!ex) return;
-      modalDraft = {name: ex.name, category: CATS[0], quantity: 1, unit: '', minThreshold: 0, expiryDate: '', barcode: '', brand: '', store: '', notes: '', openedDate: '', shelfLifeDays: '', expiryType: 'caducitat'};
-      modalEditId = null;
-      moveFromExtraId = extraId;
-      modalOpen = true;
-      render();
-    };
-  });
 
   const exportBtn = document.getElementById('exportBtn');
   if(exportBtn) exportBtn.onclick = exportList;
@@ -1350,10 +1333,8 @@ function bindEvents(){
       expiry_type: modalDraft.expiryType || 'caducitat',
     };
     const existingId = modalEditId;
-    const moveId = moveFromExtraId;
-    moveFromExtraId = null;
 
-    if(!existingId && !moveId){
+    if(!existingId){
       const dup = DATA.items.find(x => x.category === fields.category && x.name.trim().toLowerCase() === fields.name.toLowerCase());
       if(dup){
         modalOpen = false;
@@ -1365,7 +1346,6 @@ function bindEvents(){
 
     modalOpen = false;
     saveItem(fields, existingId);
-    if(moveId) removeExtraPlain(moveId);
   };
 
   const scanCancelBtn = document.getElementById('scanCancelBtn');
@@ -1472,7 +1452,7 @@ function bindEvents(){
   });
 }
 
-function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; moveFromExtraId = null; render(); }
+function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; render(); }
 
 function renderDuplicate(){
   const {existing, incoming} = duplicateState;
