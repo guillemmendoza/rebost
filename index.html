@@ -877,9 +877,10 @@ function render(){
 }
 
 function renderShelf(cat, term){
-  let items = DATA.items.filter(i => i.category === cat);
-  if(term) items = items.filter(i => i.name.toLowerCase().includes(term));
+  const allItems = DATA.items.filter(i => i.category === cat);
+  let items = term ? allItems.filter(i => i.name.toLowerCase().includes(term)) : allItems.filter(i => i.quantity > 0);
   items = items.sort((a,b)=>a.name.localeCompare(b.name,'ca'));
+  const hiddenCount = term ? 0 : allItems.length - items.length;
   return `
     <div class="shelf">
       <div class="shelf-hdr">
@@ -887,8 +888,9 @@ function renderShelf(cat, term){
         <button class="shelf-add" data-newcat="${cat}">+ Afegeix</button>
       </div>
       ${items.length === 0
-        ? `<div class="empty">${term ? 'Cap resultat aquí.' : 'Res per aquí encara.'}</div>`
+        ? `<div class="empty">${term ? 'Cap resultat aquí.' : (hiddenCount>0 ? `Tot esgotat — mira Suggeriments.` : 'Res per aquí encara.')}</div>`
         : items.map(i => renderItemRow(i)).join('')}
+      ${!term && hiddenCount>0 && items.length>0 ? `<div class="empty" style="padding:8px 2px 0;font-size:11px;">+ ${hiddenCount} esgotat${hiddenCount>1?'s':''}, a Suggeriments</div>` : ''}
     </div>
   `;
 }
