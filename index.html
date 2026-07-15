@@ -1160,15 +1160,28 @@ async function startCamera(){
     if(hint) hint.textContent = 'No s\'ha pogut carregar el lector de codis. Escriu el codi a sota.';
     return;
   }
+  // reforcem com a propietats JS (no només atributs HTML) perquè navegadors més estrictes
+  // (p. ex. Opera a iOS) deixin reproduir el vídeo sense bloquejar-lo per política d'autoplay
+  video.muted = true;
+  video.playsInline = true;
+  video.autoplay = true;
   const reader = getReader();
   try{
-    await reader.decodeFromConstraints(
-      { video: { facingMode: {ideal:'environment'} } },
-      video,
-      (result, err) => { if(result) applyScannedCode(result.getText()); }
-    );
+    await Promise.race([
+      reader.decodeFromConstraints(
+        { video: { facingMode: {ideal:'environment'} } },
+        video,
+        (result, err) => { if(result) applyScannedCode(result.getText()); }
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(Object.assign(new Error('timeout'), {name:'Timeout'})), 7000))
+    ]);
   }catch(e){
-    if(hint) hint.textContent = `No hi ha accés a la càmera (${e.name||'error'}). Escriu el codi a sota.`;
+    try{ reader.reset(); }catch(e2){}
+    if(e.name === 'Timeout'){
+      if(hint) hint.textContent = 'Aquest navegador no arrenca la càmera. Prova amb Safari o Chrome, o escriu el codi a sota.';
+    }else{
+      if(hint) hint.textContent = `No hi ha accés a la càmera (${e.name||'error'}). Escriu el codi a sota.`;
+    }
   }
 }
 function applyScannedCode(code){
