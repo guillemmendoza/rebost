@@ -418,7 +418,7 @@ async function init(){
   subscribeRealtime();
   flushQueue();
   window.addEventListener('online', flushQueue);
-  window.addEventListener('offline', render);
+  window.addEventListener('offline', () => { if(!isOverlayOpen()) render(); });
   setInterval(flushQueue, 20000);
 }
 
@@ -444,6 +444,9 @@ function cancelQueuedInsert(localId){
   pendingQueue = pendingQueue.filter(q => q.localId !== localId);
   saveQueue();
 }
+function isOverlayOpen(){
+  return modalOpen || scannerOpen || quickAddOpen || !!reconcileItem || !!adminScreen || !!confirmState || !!duplicateState;
+}
 async function flushQueue(){
   if(pendingQueue.length === 0 || !navigator.onLine) return;
   while(pendingQueue.length > 0){
@@ -460,7 +463,7 @@ async function flushQueue(){
     }catch(e){ break; }
   }
   try{ await loadData(); connError = false; }catch(e){}
-  render();
+  if(!isOverlayOpen()) render();
 }
 
 function subscribeRealtime(){
@@ -478,7 +481,12 @@ function reloadQuietDebounced(){
   reloadTimer = setTimeout(reloadQuiet, 250);
 }
 async function reloadQuiet(){
-  try{ await loadData(); connError = false; applyPersonTheme(); render(); }catch(e){ /* keep last good state */ }
+  try{
+    await loadData();
+    connError = false;
+    applyPersonTheme();
+    if(!isOverlayOpen()) render();
+  }catch(e){ /* keep last good state */ }
 }
 
 function setPerson(name){
