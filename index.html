@@ -196,6 +196,10 @@ input,select{font-family:inherit;}
 
 .admin-section-title{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-faint);margin:0 0 10px;}
 .admin-person-row{border-bottom:1px solid var(--line);padding:10px 0;}
+.catalog-admin-list{max-height:220px;overflow-y:auto;border:1px solid var(--line);border-radius:6px;}
+.catalog-admin-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px;border-bottom:1px solid var(--line);}
+.catalog-admin-row:last-child{border-bottom:none;}
+.catalog-admin-name{display:flex;flex-direction:column;font-size:13px;color:var(--ink);}
 .admin-person-row:last-of-type{border-bottom:none;}
 .admin-name-input{flex:1;border:1px solid var(--line);border-radius:4px;padding:5px 8px;font-size:13px;background:var(--bg);color:var(--ink);}
 .admin-add-row{display:flex;gap:8px;align-items:center;margin-top:10px;}
@@ -209,6 +213,8 @@ input,select{font-family:inherit;}
 .slider-hue{background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);}
 
 .fab{position:fixed;bottom:22px;right:22px;background:var(--accent);color:#fff;border:none;border-radius:24px;padding:13px 20px;font-size:13px;font-weight:500;box-shadow:0 4px 14px rgba(47,44,37,.25);z-index:40;display:flex;align-items:center;gap:7px;}
+.fab-stock{bottom:76px;background:var(--ink);}
+.fab-stock:hover{background:var(--ink);opacity:.9;}
 .fab:hover{background:var(--accent-hover);}
 .fab-icon{font-size:16px;line-height:1;}
 .quick-modal{max-width:320px;}
@@ -235,6 +241,7 @@ let theme = 'light';
 let modalOpen = false;
 let modalDraft = null;
 let modalQuick = false;
+let buyingExtraId = null;
 let matchedCatalogKey = null;
 let catalogDropdownOpen = false;
 let modalEditId = null;
@@ -572,16 +579,9 @@ async function removeExtraPlain(id){
   DATA.extras = DATA.extras.filter(e=>e.id!==id);
   render();
   const res = await tryOrQueue('extras', 'delete', null, {id});
-  if(res.ok){ if(ex) logActivity('comprat', ex.name); await loadData(); }
+  if(res.ok){ await loadData(); }
   else{ showToast('Sense connexió: es sincronitzarà després.'); }
   render();
-}
-async function removeExtra(id){
-  const ex = DATA.extras.find(e=>e.id===id);
-  if(!ex) return;
-  const exact = DATA.items.find(i => i.name.toLowerCase() === ex.name.toLowerCase());
-  if(exact){ reconcileItem = exact.id; render(); return; }
-  removeExtraPlain(id);
 }
 async function addShortcut(name){
   if(!name.trim()) return;
@@ -615,6 +615,10 @@ async function exportBackup(){
 
 async function removeShortcut(id){
   try{ await sb.from('shortcuts').delete().eq('id', id); await loadData(); }catch(e){}
+  render();
+}
+async function removeCatalogEntry(key){
+  try{ await sb.from('catalog').delete().eq('key', key); await loadData(); }catch(e){}
   render();
 }
 
@@ -731,7 +735,7 @@ function render(){
   if(!ME){ renderPicker(); return; }
 
   const term = searchTerm.trim().toLowerCase();
-  const lowStock = DATA.items.filter(i => i.quantity === 0 || (i.min_threshold > 0 && i.quantity <= i.min_threshold));
+  const lowStock = DATA.items.filter(i => i.is_recurring !== false && (i.quantity === 0 || (i.min_threshold > 0 && i.quantity <= i.min_threshold)));
   const recurringToShow = DATA.recurring.filter(r =>
     !DATA.items.some(i => i.name.toLowerCase() === r.name.toLowerCase()) &&
     !DATA.extras.some(e => e.name.toLowerCase() === r.name.toLowerCase())
@@ -822,9 +826,10 @@ function render(){
               ? `<p class="side-empty">Res a la llista encara.</p>`
               : DATA.extras.map(e => `
                   <div class="extra-row ${e._pending?'is-pending':''}">
-                    <button class="extra-x" data-rmextra="${e.id}" aria-label="Treu ${esc(e.name)} de la llista">✕</button>
                     <span style="flex:1">${esc(e.name)}${e._pending?' <em style="color:var(--accent-2);font-size:11px;">(pendent)</em>':''}</span>
                     <span class="dot" style="background:${personColor(e.added_by)}"></span>
+                    <button class="side-action" data-buyextra="${e.id}">Comprat</button>
+                    <button class="extra-x" data-rmextra="${e.id}" aria-label="Elimina ${esc(e.name)} de la llista">✕</button>
                   </div>`).join('')}
             <form class="extra-form" id="extraForm">
               <input type="text" placeholder="p. ex. paper de vàter" id="extraInput" autocomplete="off">
@@ -854,12 +859,16 @@ function render(){
     ${confirmState ? renderConfirm() : ''}
     ${duplicateState ? renderDuplicate() : ''}
     ${quickAddOpen ? renderQuickAdd() : ''}
-    ${!modalOpen && !scannerOpen && !quickAddOpen && !reconcileItem && !adminScreen ? `<button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>` : ''}
+    ${!modalOpen && !scannerOpen && !quickAddOpen && !reconcileItem && !adminScreen ? `
+      <button class="fab fab-stock" id="fabStockBtn"><span class="fab-icon">+</span>Afegeix a l'estoc</button>
+      <button class="fab" id="fabBtn"><span class="fab-icon">+</span>Apunta per comprar</button>
+    ` : ''}
     ${toastMsg ? `<div class="toast">${esc(toastMsg)}</div>` : ''}
   `;
 
   bindEvents();
   restoreSearchFocus();
+  restoreQuickNameFocus();
   if(scannerOpen) startCamera();
   if(quickAddOpen){
     const qi = document.getElementById('quickAddInput');
@@ -885,7 +894,7 @@ function renderShelf(cat, term){
 }
 
 function renderItemRow(i){
-  const low = i.min_threshold > 0 && i.quantity <= i.min_threshold;
+  const low = i.is_recurring !== false && i.min_threshold > 0 && i.quantity <= i.min_threshold;
   const eff = effectiveExpiry(i);
   const days = eff ? daysUntil(eff) : null;
   const expiringSoon = days !== null && days <= EXPIRY_WARN_DAYS;
@@ -1022,6 +1031,13 @@ function renderModal(){
           <div class="field">
             <label>Reposar quan arribi a</label>
             <input type="number" step="any" min="0" id="f-min" value="${d.minThreshold}">
+          </div>
+          <div class="field">
+            <label class="radio-pill" style="justify-content:flex-start;gap:8px;width:100%;">
+              <input type="checkbox" id="f-recurring" ${d.isRecurring!==false?'checked':''}>
+              Es reposa habitualment (avisa quan falta)
+            </label>
+            <p style="font-size:11px;color:var(--ink-faint);margin-top:5px;">Desmarca-ho per a coses puntuals (p. ex. gambes de Nadal) — no sortiran mai a Suggeriments encara que s'acabin.</p>
           </div>
           <div class="field">
             <label>Tipus de data</label>
@@ -1200,6 +1216,14 @@ function applyScannedCode(code){
 /* ---------- events ---------- */
 
 let searchFocused = false;
+let quickNameFocused = false;
+function restoreQuickNameFocus(){
+  const el = document.getElementById('qf-name');
+  if(el && quickNameFocused){
+    el.focus();
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+}
 function restoreSearchFocus(){
   const el = document.getElementById('searchInput');
   if(el && searchFocused){
@@ -1243,7 +1267,7 @@ function bindEvents(){
       const id = el.dataset.edit;
       const it = DATA.items.find(i=>i.id===id);
       if(it){
-        modalDraft = {name:it.name, category:it.category, quantity:it.quantity, unit:it.unit||'', minThreshold:it.min_threshold, expiryDate:it.expiry_date||'', barcode:it.barcode||'', brand:it.brand||'', store:it.store||'', notes:it.notes||'', openedDate:it.opened_date||'', shelfLifeDays:it.shelf_life_days||'', expiryType:it.expiry_type||'caducitat'};
+        modalDraft = {name:it.name, category:it.category, quantity:it.quantity, unit:it.unit||'', minThreshold:it.min_threshold, expiryDate:it.expiry_date||'', barcode:it.barcode||'', brand:it.brand||'', store:it.store||'', notes:it.notes||'', openedDate:it.opened_date||'', shelfLifeDays:it.shelf_life_days||'', expiryType:it.expiry_type||'caducitat', isRecurring:it.is_recurring!==false};
         modalEditId = id; modalQuick = false; modalOpen = true; render();
       }
     };
@@ -1262,7 +1286,19 @@ function bindEvents(){
     };
   });
   root.querySelectorAll('[data-rmextra]').forEach(b => {
-    b.onclick = () => removeExtra(b.dataset.rmextra);
+    b.onclick = () => removeExtraPlain(b.dataset.rmextra);
+  });
+  root.querySelectorAll('[data-buyextra]').forEach(b => {
+    b.onclick = () => {
+      const extraId = b.dataset.buyextra;
+      const ex = DATA.extras.find(e => e.id === extraId);
+      if(!ex) return;
+      const matched = DATA.catalog.find(c => c.key === ex.name.toLowerCase());
+      modalDraft = {name:ex.name, category:(matched && matched.category) || CATS[0], quantity:1, unit:'', minThreshold:0, expiryDate:'', barcode:'', brand:'', store:'', notes:'', openedDate:'', shelfLifeDays:'', expiryType:'caducitat'};
+      modalEditId = null; modalQuick = true; catalogDropdownOpen = false;
+      buyingExtraId = extraId;
+      modalOpen = true; render();
+    };
   });
 
   const exportBtn = document.getElementById('exportBtn');
@@ -1270,6 +1306,11 @@ function bindEvents(){
 
   const fabBtn = document.getElementById('fabBtn');
   if(fabBtn) fabBtn.onclick = () => { quickAddOpen = true; render(); };
+  const fabStockBtn = document.getElementById('fabStockBtn');
+  if(fabStockBtn) fabStockBtn.onclick = () => {
+    modalDraft = {name:'', category:CATS[0], quantity:1, unit:'', minThreshold:0, expiryDate:'', barcode:'', brand:'', store:'', notes:'', openedDate:'', shelfLifeDays:'', expiryType:'caducitat'};
+    modalEditId = null; modalQuick = true; catalogDropdownOpen = false; modalOpen = true; render();
+  };
 
   const quickOverlay = document.getElementById('quickOverlay');
   if(quickOverlay) quickOverlay.onclick = (e) => { if(e.target.id === 'quickOverlay'){ quickAddOpen = false; manageShortcuts = false; render(); } };
@@ -1350,6 +1391,8 @@ function bindEvents(){
   root.querySelectorAll('input[name="expiryType"]').forEach(el => {
     el.addEventListener('change', (e) => { modalDraft.expiryType = e.target.value; });
   });
+  const fRecurring = document.getElementById('f-recurring');
+  if(fRecurring) fRecurring.addEventListener('change', (e) => { modalDraft.isRecurring = e.target.checked; });
 
   const scanBtn = document.getElementById('scanBtn');
   if(scanBtn) scanBtn.onclick = openScanner;
@@ -1361,7 +1404,9 @@ function bindEvents(){
       catalogDropdownOpen = true;
       render();
     });
+    qfName.addEventListener('focus', () => { quickNameFocused = true; });
     qfName.addEventListener('blur', () => {
+      quickNameFocused = false;
       setTimeout(() => { catalogDropdownOpen = false; render(); }, 150);
     });
   }
@@ -1404,16 +1449,20 @@ function bindEvents(){
       opened_date: null,
       shelf_life_days: (matched && matched.shelf_life_days) || null,
       expiry_type: (matched && matched.expiry_type) || 'caducitat',
+      is_recurring: true,
     };
+    const buyId = buyingExtraId;
+    buyingExtraId = null;
     const dup = DATA.items.find(x => x.category === fields.category && x.name.trim().toLowerCase() === fields.name.toLowerCase());
     if(dup){
       modalOpen = false;
-      duplicateState = {existing: dup, incoming: fields};
+      duplicateState = {existing: dup, incoming: fields, buyingExtraId: buyId};
       render();
       return;
     }
     modalOpen = false;
     saveItem(fields, null);
+    if(buyId){ removeExtraPlain(buyId); logActivity('comprat', fields.name); }
   };
 
   const itemForm = document.getElementById('itemForm');
@@ -1434,6 +1483,7 @@ function bindEvents(){
       opened_date: modalDraft.openedDate || null,
       shelf_life_days: modalDraft.shelfLifeDays ? parseInt(modalDraft.shelfLifeDays, 10) : null,
       expiry_type: modalDraft.expiryType || 'caducitat',
+      is_recurring: modalDraft.isRecurring !== false,
     };
     const existingId = modalEditId;
 
@@ -1466,15 +1516,17 @@ function bindEvents(){
   if(cancelDuplicateBtn) cancelDuplicateBtn.onclick = () => { duplicateState = null; render(); };
   const mergeDuplicateBtn = document.getElementById('mergeDuplicateBtn');
   if(mergeDuplicateBtn) mergeDuplicateBtn.onclick = () => {
-    const {existing, incoming} = duplicateState;
+    const {existing, incoming, buyingExtraId: buyId} = duplicateState;
     duplicateState = null;
     reconcileQty(existing.id, incoming.quantity);
+    if(buyId) removeExtraPlain(buyId);
   };
   const createAnywayBtn = document.getElementById('createAnywayBtn');
   if(createAnywayBtn) createAnywayBtn.onclick = () => {
-    const {incoming} = duplicateState;
+    const {incoming, buyingExtraId: buyId} = duplicateState;
     duplicateState = null;
     saveItem(incoming, null);
+    if(buyId){ removeExtraPlain(buyId); logActivity('comprat', incoming.name); }
   };
 
   /* ---- confirm dialog ---- */
@@ -1510,6 +1562,9 @@ function bindEvents(){
   if(adminCloseBtn) adminCloseBtn.onclick = () => { adminScreen = null; editingPersonId = null; adminColorDraft = null; render(); };
   const exportBackupBtn = document.getElementById('exportBackupBtn');
   if(exportBackupBtn) exportBackupBtn.onclick = exportBackup;
+  root.querySelectorAll('[data-rmcatalog]').forEach(b => {
+    b.onclick = () => removeCatalogEntry(b.dataset.rmcatalog);
+  });
 
   const addPersonBtn = document.getElementById('addPersonBtn');
   if(addPersonBtn) addPersonBtn.onclick = () => { addingPerson = true; render(); };
@@ -1555,7 +1610,7 @@ function bindEvents(){
   });
 }
 
-function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; modalQuick = false; matchedCatalogKey = null; catalogDropdownOpen = false; render(); }
+function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; modalQuick = false; matchedCatalogKey = null; catalogDropdownOpen = false; buyingExtraId = null; render(); }
 
 function renderDuplicate(){
   const {existing, incoming} = duplicateState;
@@ -1634,6 +1689,18 @@ function renderAdminPanel(){
 
         <p class="admin-section-title" style="margin-top:20px;">Dades</p>
         <button type="button" class="side-action" id="exportBackupBtn">Exporta còpia de seguretat (JSON)</button>
+
+        <p class="admin-section-title" style="margin-top:20px;">Catàleg de productes (${DATA.catalog.length})</p>
+        <p style="font-size:11px;color:var(--ink-faint);margin:-4px 0 8px;">Tot el que s'ha escrit alguna vegada, fet servir per l'autocompletar. Elimina'n una entrada si té dades errònies.</p>
+        <div class="catalog-admin-list">
+          ${DATA.catalog.length === 0
+            ? `<p class="side-empty">Encara no hi ha res.</p>`
+            : DATA.catalog.map(c => `
+                <div class="catalog-admin-row">
+                  <span class="catalog-admin-name">${esc(c.name)}<span class="catalog-option-cat">${esc(c.category||'')}${c.brand?' · '+esc(c.brand):''}</span></span>
+                  <button type="button" class="chip-x" data-rmcatalog="${esc(c.key)}" title="Elimina del catàleg">✕</button>
+                </div>`).join('')}
+        </div>
 
         <div class="modal-actions" style="margin-top:22px;">
           <button type="button" class="btn-ghost" id="adminCloseBtn">Tanca</button>
