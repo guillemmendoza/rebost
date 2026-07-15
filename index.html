@@ -252,6 +252,7 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,9
 
 const root = document.getElementById('root');
 const esc = (s) => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const nameWithBrand = (i) => i.brand ? `${esc(i.name)} <span class="item-brand">${esc(i.brand)}</span>` : esc(i.name);
 const personColor = (name) => (DATA.people.find(p=>p.name===name)||{}).color || DEFAULT_ACCENT;
 
 function shade(hex, amt){
@@ -808,7 +809,7 @@ function render(){
               ? `<p class="side-empty">Res a la vista, tranquil.</p>`
               : expiringSoon.map(i => `
                   <div class="buy-row">
-                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}</span>
+                    <span class="buy-name" data-edit="${i.id}">${nameWithBrand(i)}</span>
                     <span class="buy-tag ${daysUntil(effectiveExpiry(i))>=0?'warn':''}">${expiryLabel(daysUntil(effectiveExpiry(i)), i.expiry_type)}</span>
                   </div>`).join('')}
           </div>
@@ -823,7 +824,7 @@ function render(){
               : ''}
             ${lowStock.map(i => `
                   <div class="buy-row">
-                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}${i.store ? `<span class="buy-store">${esc(i.store)}</span>` : ''}<span class="suggest-tag">${i.quantity===0 ? "s'ha acabat" : 'sota el mínim'}</span></span>
+                    <span class="buy-name" data-edit="${i.id}">${nameWithBrand(i)}${i.store ? `<span class="buy-store">${esc(i.store)}</span>` : ''}<span class="suggest-tag">${i.quantity===0 ? "s'ha acabat" : 'sota el mínim'}</span></span>
                     <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
                       <span class="buy-tag">${i.quantity}${esc(i.unit||'')}${i.min_threshold>0 ? ` / mín ${i.min_threshold}` : ''}</span>
                       <button class="side-action" data-addtolist="${esc(i.name)}">+ llista</button>
@@ -927,7 +928,7 @@ function renderItemRow(i){
   else if(expiringSoon){ subLine = expiryLabel(days, i.expiry_type); subClass = days < 0 ? 'low' : 'warn'; }
   else { subLine = `${esc(i.updated_by||'')} · ${timeAgo(i.updated_at)}`; }
 
-  const nameLine = i.brand ? `${esc(i.name)} <span class="item-brand">${esc(i.brand)}</span>` : esc(i.name);
+  const nameLine = nameWithBrand(i);
 
   return `
     <div class="item-row ${i._pending?'is-pending':''}" data-edit="${i.id}">
