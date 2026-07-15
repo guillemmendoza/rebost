@@ -1155,7 +1155,11 @@ function closeScanner(){
 async function startCamera(){
   const video = document.getElementById('scanVideo');
   const hint = document.getElementById('scanHint');
-  if(!video || typeof ZXing === 'undefined') return;
+  if(!video) return;
+  if(typeof ZXing === 'undefined'){
+    if(hint) hint.textContent = 'No s\'ha pogut carregar el lector de codis. Escriu el codi a sota.';
+    return;
+  }
   const reader = getReader();
   try{
     await reader.decodeFromConstraints(
@@ -1164,7 +1168,7 @@ async function startCamera(){
       (result, err) => { if(result) applyScannedCode(result.getText()); }
     );
   }catch(e){
-    if(hint) hint.textContent = 'No hi ha accés a la càmera aquí. Escriu el codi a sota.';
+    if(hint) hint.textContent = `No hi ha accés a la càmera (${e.name||'error'}). Escriu el codi a sota.`;
   }
 }
 function applyScannedCode(code){
