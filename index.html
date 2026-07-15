@@ -552,11 +552,16 @@ async function reconcileQty(id, addAmount){
 }
 async function addExtra(name){
   if(!name.trim()) return;
+  const clean = name.trim();
+  if(DATA.extras.some(e => e.name.toLowerCase() === clean.toLowerCase())){
+    showToast('Ja hi és, a la llista.');
+    return;
+  }
   const localId = uid();
-  DATA.extras.push({id: localId, name: name.trim(), added_by: ME, created_at: new Date().toISOString(), _pending:true});
+  DATA.extras.push({id: localId, name: clean, added_by: ME, created_at: new Date().toISOString(), _pending:true});
   render();
-  const res = await tryOrQueue('extras', 'insert', {name:name.trim(), added_by:ME}, null, localId);
-  if(res.ok){ logActivity('afegeix a la llista', name.trim()); await loadData(); }
+  const res = await tryOrQueue('extras', 'insert', {name: clean, added_by:ME}, null, localId);
+  if(res.ok){ logActivity('afegeix a la llista', clean); await loadData(); }
   else{ showToast('Sense connexió: s\'afegirà quan torni internet.'); }
   render();
 }
