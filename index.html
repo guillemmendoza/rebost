@@ -520,23 +520,6 @@ async function stepQty(id, delta){
   const it = DATA.items.find(i=>i.id===id);
   if(!it) return;
   const newQty = Math.max(0, Math.round((it.quantity + delta) * 100) / 100);
-
-  if(newQty === 0 && delta < 0){
-    const name = it.name;
-    if(it._pending){
-      cancelQueuedInsert(id);
-      DATA.items = DATA.items.filter(i=>i.id!==id);
-    }else{
-      DATA.items = DATA.items.filter(i=>i.id!==id);
-      render();
-      const res = await tryOrQueue('items', 'delete', null, {id});
-      if(res.ok) logActivity('s\'ha acabat', name);
-      else showToast('Sense connexió: s\'eliminarà quan torni internet.');
-    }
-    await addExtra(name);
-    return;
-  }
-
   it.quantity = newQty; render(); // optimistic
   if(it._pending){
     const queued = pendingQueue.find(q => q.localId === id);
@@ -727,7 +710,7 @@ function render(){
   if(!ME){ renderPicker(); return; }
 
   const term = searchTerm.trim().toLowerCase();
-  const lowStock = DATA.items.filter(i => i.min_threshold > 0 && i.quantity <= i.min_threshold);
+  const lowStock = DATA.items.filter(i => i.quantity === 0 || (i.min_threshold > 0 && i.quantity <= i.min_threshold));
   const aiToShow = aiSuggestions.filter(name =>
     !dismissedAI.includes(name.toLowerCase()) &&
     !DATA.items.some(i => i.name.toLowerCase() === name.toLowerCase()) &&
@@ -799,9 +782,9 @@ function render(){
               : ''}
             ${lowStock.map(i => `
                   <div class="buy-row">
-                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}${i.store ? `<span class="buy-store">${esc(i.store)}</span>` : ''}<span class="suggest-tag">sota el mínim</span></span>
+                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}${i.store ? `<span class="buy-store">${esc(i.store)}</span>` : ''}<span class="suggest-tag">${i.quantity===0 ? "s'ha acabat" : 'sota el mínim'}</span></span>
                     <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
-                      <span class="buy-tag">${i.quantity}${esc(i.unit||'')} / mín ${i.min_threshold}</span>
+                      <span class="buy-tag">${i.quantity}${esc(i.unit||'')}${i.min_threshold>0 ? ` / mín ${i.min_threshold}` : ''}</span>
                       <button class="side-action" data-addtolist="${esc(i.name)}">+ llista</button>
                       <button class="side-action" data-reconcile="${i.id}">Comprat</button>
                     </span>
