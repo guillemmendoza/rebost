@@ -118,6 +118,8 @@ input,select{font-family:inherit;}
 .buy-row:last-child{border-bottom:none;}
 .buy-name{cursor:pointer;display:flex;flex-direction:column;line-height:1.35;}
 .buy-store{font-size:11px;color:var(--ink-faint);font-weight:400;}
+.suggest-tag{display:inline-block;font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--brick);margin-top:2px;}
+.suggest-tag.ai{color:var(--accent-2);}
 .buy-name:hover{text-decoration:underline;}
 .buy-tag{font-size:10px;font-family:'IBM Plex Mono',monospace;color:var(--brick);white-space:nowrap;}
 .buy-tag.warn{color:var(--ochre);}
@@ -242,6 +244,8 @@ let adminColorDraft = null; // {personId, h, s, l}
 let confirmState = null; // {message, onConfirm}
 let duplicateState = null; // {existing, incoming}
 let pendingQueue = [];
+let aiSuggestions = [];
+let dismissedAI = [];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,9);
 
 const root = document.getElementById('root');
@@ -350,6 +354,41 @@ function saveQueue(){
   try{ localStorage.setItem('rebost-queue', JSON.stringify(pendingQueue)); }catch(e){}
 }
 
+function loadAICache(){
+  try{
+    const raw = localStorage.getItem('rebost-ai-suggestions');
+    if(!raw) return null;
+    const parsed = JSON.parse(raw);
+    const today = new Date().toISOString().slice(0,10);
+    return parsed.date === today ? parsed.items : null;
+  }catch(e){ return null; }
+}
+function saveAICache(items){
+  try{ localStorage.setItem('rebost-ai-suggestions', JSON.stringify({date: new Date().toISOString().slice(0,10), items})); }catch(e){}
+}
+async function fetchAISuggestions(){
+  try{
+    const known = DATA.items.map(i => i.name).join(', ') || '(cap article encara)';
+    const prompt = `Aquest és l'inventari actual d'un rebost de casa (Nevera/Congelador/Rebost): ${known}.
+Dona'm com a màxim 6 productes bàsics i habituals d'una llar catalana normal que probablement falten, tenint en compte el que ja hi ha (no repeteixis res que ja hi sigui, encara que estigui escrit diferent).
+Respon NOMÉS amb un array JSON de strings en català, sense cap altre text ni explicació. Exemple de format: ["Pa", "Ous", "Oli d'oliva"]`;
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 300, messages: [{role:'user', content: prompt}] })
+    });
+    const data = await res.json();
+    const text = (data.content || []).map(b => b.text || '').join('').trim();
+    const clean = text.replace(/```json|```/g, '').trim();
+    const arr = JSON.parse(clean);
+    if(Array.isArray(arr)){
+      aiSuggestions = arr.filter(s => typeof s === 'string').slice(0, 6);
+      saveAICache(aiSuggestions);
+      render();
+    }
+  }catch(e){ /* sense suggeriments IA disponibles, no passa res */ }
+}
+
 async function init(){
   ME = loadPerson();
   theme = loadTheme();
@@ -364,6 +403,8 @@ async function init(){
     else { connError = true; }
   }
   applyPersonTheme();
+  const cachedAI = loadAICache();
+  if(cachedAI) aiSuggestions = cachedAI; else fetchAISuggestions();
   render();
   subscribeRealtime();
   flushQueue();
@@ -669,6 +710,11 @@ function render(){
 
   const term = searchTerm.trim().toLowerCase();
   const lowStock = DATA.items.filter(i => i.min_threshold > 0 && i.quantity <= i.min_threshold);
+  const aiToShow = aiSuggestions.filter(name =>
+    !dismissedAI.includes(name.toLowerCase()) &&
+    !DATA.items.some(i => i.name.toLowerCase() === name.toLowerCase()) &&
+    !DATA.extras.some(e => e.name.toLowerCase() === name.toLowerCase())
+  );
   const expiringSoon = DATA.items
     .filter(i => effectiveExpiry(i) && daysUntil(effectiveExpiry(i)) <= EXPIRY_WARN_DAYS)
     .sort((a,b) => daysUntil(effectiveExpiry(a)) - daysUntil(effectiveExpiry(b)));
@@ -727,28 +773,41 @@ function render(){
 
           <div class="side-block">
             <div class="side-hdr">
-              <p class="side-title">Per reposar</p>
-              <button class="side-action" id="exportBtn">Copia per WhatsApp</button>
+              <p class="side-title">Suggeriments</p>
+              <button class="side-action" id="refreshAiBtn" title="Torna a demanar suggeriments">↻ actualitza</button>
             </div>
-            ${lowStock.length === 0
-              ? `<p class="side-empty">Tot per sobre del mínim.</p>`
-              : lowStock.map(i => `
+            ${(lowStock.length === 0 && aiToShow.length === 0)
+              ? `<p class="side-empty">Res a suggerir ara mateix.</p>`
+              : ''}
+            ${lowStock.map(i => `
                   <div class="buy-row">
-                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}${i.store ? `<span class="buy-store">${esc(i.store)}</span>` : ''}</span>
-                    <span style="display:flex;align-items:center;gap:8px;">
+                    <span class="buy-name" data-edit="${i.id}">${esc(i.name)}${i.store ? `<span class="buy-store">${esc(i.store)}</span>` : ''}<span class="suggest-tag">sota el mínim</span></span>
+                    <span style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;">
                       <span class="buy-tag">${i.quantity}${esc(i.unit||'')} / mín ${i.min_threshold}</span>
+                      <button class="side-action" data-addtolist="${esc(i.name)}">+ llista</button>
                       <button class="side-action" data-reconcile="${i.id}">Comprat</button>
+                    </span>
+                  </div>`).join('')}
+            ${aiToShow.map(name => `
+                  <div class="buy-row">
+                    <span class="buy-name">${esc(name)}<span class="suggest-tag ai">bàsic habitual</span></span>
+                    <span style="display:flex;align-items:center;gap:6px;">
+                      <button class="side-action" data-addtolist="${esc(name)}">+ llista</button>
+                      <button class="side-action" data-dismissai="${esc(name)}">Ignora</button>
                     </span>
                   </div>`).join('')}
           </div>
 
           <div class="side-block">
-            <p class="side-title">Afegits a mà</p>
+            <div class="side-hdr">
+              <p class="side-title">Llista de la compra</p>
+              <button class="side-action" id="exportBtn">Copia per WhatsApp</button>
+            </div>
             ${DATA.extras.length === 0
-              ? `<p class="side-empty">Res afegit encara.</p>`
+              ? `<p class="side-empty">Res a la llista encara.</p>`
               : DATA.extras.map(e => `
                   <div class="extra-row ${e._pending?'is-pending':''}">
-                    <button class="extra-x" data-rmextra="${e.id}" aria-label="Elimina ${esc(e.name)}">✕</button>
+                    <button class="extra-x" data-rmextra="${e.id}" aria-label="Treu ${esc(e.name)} de la llista">✕</button>
                     <span style="flex:1">${esc(e.name)}${e._pending?' <em style="color:var(--accent-2);font-size:11px;">(pendent)</em>':''}</span>
                     <span class="dot" style="background:${personColor(e.added_by)}"></span>
                   </div>`).join('')}
@@ -1115,6 +1174,11 @@ function bindEvents(){
 
   const exportBtn = document.getElementById('exportBtn');
   if(exportBtn) exportBtn.onclick = exportList;
+  const refreshAiBtn = document.getElementById('refreshAiBtn');
+  if(refreshAiBtn) refreshAiBtn.onclick = () => { showToast('Actualitzant suggeriments…'); fetchAISuggestions(); };
+  root.querySelectorAll('[data-dismissai]').forEach(b => {
+    b.onclick = () => { dismissedAI.push(b.dataset.dismissai.toLowerCase()); render(); };
+  });
 
   const fabBtn = document.getElementById('fabBtn');
   if(fabBtn) fabBtn.onclick = () => { quickAddOpen = true; render(); };
