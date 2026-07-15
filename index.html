@@ -1102,9 +1102,10 @@ function applyScannedCode(code){
 
 /* ---------- events ---------- */
 
+let searchFocused = false;
 function restoreSearchFocus(){
   const el = document.getElementById('searchInput');
-  if(el && document.activeElement !== el && el.dataset.wasFocused){
+  if(el && searchFocused){
     el.focus();
     el.setSelectionRange(el.value.length, el.value.length);
   }
@@ -1127,9 +1128,10 @@ function bindEvents(){
   if(searchInput){
     searchInput.oninput = (e) => {
       searchTerm = e.target.value;
-      e.target.dataset.wasFocused = '1';
       render();
     };
+    searchInput.onfocus = () => { searchFocused = true; };
+    searchInput.onblur = () => { searchFocused = false; };
   }
 
   root.querySelectorAll('[data-newcat]').forEach(b => {
