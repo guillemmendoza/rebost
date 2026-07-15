@@ -244,6 +244,7 @@ let addingPerson = false;
 let adminColorDraft = null; // {personId, h, s, l}
 let confirmState = null; // {message, onConfirm}
 let duplicateState = null; // {existing, incoming}
+let moveFromExtraId = null;
 let pendingQueue = [];
 let aiSuggestions = [];
 let dismissedAI = [];
@@ -568,15 +569,37 @@ async function removeExtraPlain(id){
   else{ showToast('Sense connexió: es sincronitzarà després.'); }
   render();
 }
+async function aiFindMatch(name){
+  try{
+    const known = DATA.items.map(i => i.name);
+    if(known.length === 0) return null;
+    const prompt = `Tinc aquest producte a la llista de la compra: "${name}". Aquests són els articles que ja tinc a l'inventari: ${JSON.stringify(known)}.
+Si "${name}" es refereix quasi segur al mateix producte real que un d'aquests (no només similar — han de ser intercanviables de veritat), respon NOMÉS amb el nom exacte tal com surt a la llista.
+Si no n'hi ha cap que sigui clarament el mateix producte (per exemple "Aigua" i "Aigua mineral" NO són el mateix producte), respon NOMÉS amb la paraula CAP.`;
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ model: 'claude-sonnet-4-6', max_tokens: 60, messages: [{role:'user', content:prompt}] })
+    });
+    const data = await res.json();
+    const text = (data.content || []).map(b => b.text || '').join('').trim();
+    if(!text || text.toUpperCase().includes('CAP')) return null;
+    const clean = text.replace(/["'.]/g,'').trim();
+    return known.find(n => n.toLowerCase() === clean.toLowerCase()) || null;
+  }catch(e){ return null; }
+}
 async function removeExtra(id){
   const ex = DATA.extras.find(e=>e.id===id);
   if(!ex) return;
-  const match = DATA.items.find(i => i.name.toLowerCase() === ex.name.toLowerCase());
-  if(match){
-    // coincideix amb un article de l'estoc: ho tractem com "comprat" i actualitzem la quantitat
-    reconcileItem = match.id;
-    render();
-    return;
+  const exact = DATA.items.find(i => i.name.toLowerCase() === ex.name.toLowerCase());
+  if(exact){ reconcileItem = exact.id; render(); return; }
+
+  const guessName = await aiFindMatch(ex.name);
+  if(guessName){
+    const guessed = DATA.items.find(i => i.name.toLowerCase() === guessName.toLowerCase());
+    if(guessed){
+      askConfirm(`"${ex.name}" i "${guessed.name}" semblen el mateix producte. Vols actualitzar l'estoc de "${guessed.name}" en comptes de treure'l sense més?`, () => { reconcileItem = guessed.id; render(); }, 'Sí, actualitza', 'var(--accent)');
+      return;
+    }
   }
   removeExtraPlain(id);
 }
@@ -698,8 +721,8 @@ function showToast(msg){
   clearTimeout(toastTimer);
   toastTimer = setTimeout(()=>{ toastMsg = null; render(); }, 2200);
 }
-function askConfirm(message, onConfirm){
-  confirmState = {message, onConfirm};
+function askConfirm(message, onConfirm, okLabel, okColor){
+  confirmState = {message, onConfirm, okLabel: okLabel || 'Sí, elimina', okColor: okColor || 'var(--brick)'};
   render();
 }
 function exportList(){
@@ -824,12 +847,16 @@ function render(){
             </div>
             ${DATA.extras.length === 0
               ? `<p class="side-empty">Res a la llista encara.</p>`
-              : DATA.extras.map(e => `
+              : DATA.extras.map(e => {
+                  const alreadyTracked = DATA.items.some(i => i.name.toLowerCase() === e.name.toLowerCase());
+                  return `
                   <div class="extra-row ${e._pending?'is-pending':''}">
                     <button class="extra-x" data-rmextra="${e.id}" aria-label="Treu ${esc(e.name)} de la llista">✕</button>
                     <span style="flex:1">${esc(e.name)}${e._pending?' <em style="color:var(--accent-2);font-size:11px;">(pendent)</em>':''}</span>
+                    ${!alreadyTracked ? `<button class="side-action" data-movetostock="${e.id}" title="Converteix en article de l'estoc">→ estoc</button>` : ''}
                     <span class="dot" style="background:${personColor(e.added_by)}"></span>
-                  </div>`).join('')}
+                  </div>`;
+                }).join('')}
             <form class="extra-form" id="extraForm">
               <input type="text" placeholder="p. ex. paper de vàter" id="extraInput" autocomplete="off">
               <button type="submit">Afegeix</button>
@@ -1190,6 +1217,18 @@ function bindEvents(){
   root.querySelectorAll('[data-rmextra]').forEach(b => {
     b.onclick = () => removeExtra(b.dataset.rmextra);
   });
+  root.querySelectorAll('[data-movetostock]').forEach(b => {
+    b.onclick = () => {
+      const extraId = b.dataset.movetostock;
+      const ex = DATA.extras.find(e => e.id === extraId);
+      if(!ex) return;
+      modalDraft = {name: ex.name, category: CATS[0], quantity: 1, unit: '', minThreshold: 0, expiryDate: '', barcode: '', brand: '', store: '', notes: '', openedDate: '', shelfLifeDays: '', expiryType: 'caducitat'};
+      modalEditId = null;
+      moveFromExtraId = extraId;
+      modalOpen = true;
+      render();
+    };
+  });
 
   const exportBtn = document.getElementById('exportBtn');
   if(exportBtn) exportBtn.onclick = exportList;
@@ -1305,8 +1344,10 @@ function bindEvents(){
       expiry_type: modalDraft.expiryType || 'caducitat',
     };
     const existingId = modalEditId;
+    const moveId = moveFromExtraId;
+    moveFromExtraId = null;
 
-    if(!existingId){
+    if(!existingId && !moveId){
       const dup = DATA.items.find(x => x.category === fields.category && x.name.trim().toLowerCase() === fields.name.toLowerCase());
       if(dup){
         modalOpen = false;
@@ -1318,6 +1359,7 @@ function bindEvents(){
 
     modalOpen = false;
     saveItem(fields, existingId);
+    if(moveId) removeExtraPlain(moveId);
   };
 
   const scanCancelBtn = document.getElementById('scanCancelBtn');
@@ -1424,7 +1466,7 @@ function bindEvents(){
   });
 }
 
-function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; render(); }
+function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; moveFromExtraId = null; render(); }
 
 function renderDuplicate(){
   const {existing, incoming} = duplicateState;
@@ -1453,7 +1495,7 @@ function renderConfirm(){
         <p style="font-size:14.5px;color:var(--ink);margin:4px 0 20px;line-height:1.4;">${esc(confirmState.message)}</p>
         <div class="modal-actions" style="justify-content:center;gap:14px;">
           <button type="button" class="btn-ghost" id="confirmCancelBtn">Cancel·la</button>
-          <button type="button" class="btn-primary" id="confirmOkBtn" style="background:var(--brick);border-color:var(--brick);">Sí, elimina</button>
+          <button type="button" class="btn-primary" id="confirmOkBtn" style="background:${confirmState.okColor};border-color:${confirmState.okColor};">${esc(confirmState.okLabel)}</button>
         </div>
       </div>
     </div>
