@@ -18,6 +18,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap');
 
 :root{
+  color-scheme: light;
   --bg:#EDEAE2;
   --surface:#F7F5EF;
   --surface-2:#E4E0D3;
@@ -36,6 +37,7 @@
   --radius:5px;
 }
 :root[data-theme="dark"]{
+  color-scheme: dark;
   --bg:#1E1C18;
   --surface:#28251F;
   --surface-2:#332F27;
@@ -52,7 +54,7 @@ body,#root,.wrap{transition:background-color .15s ease, color .15s ease;}
 html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:'IBM Plex Sans',sans-serif;}
 #root{min-height:100vh;}
 button{font-family:inherit;cursor:pointer;transition:background-color .12s ease,border-color .12s ease,color .12s ease,opacity .12s ease;}
-input,select{font-family:inherit;}
+input,select{font-family:inherit;color:var(--ink);}
 
 .wrap{max-width:920px;margin:0 auto;padding:28px 20px 80px;}
 
@@ -73,7 +75,11 @@ input,select{font-family:inherit;}
 .person-menu button{display:flex;align-items:center;gap:8px;width:100%;background:none;border:none;padding:9px 12px;font-size:13px;text-align:left;color:var(--ink);}
 .person-menu button:hover{background:var(--surface-2);}
 
-.search{width:100%;border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;font-size:13px;background:var(--surface);color:var(--ink);margin-bottom:22px;}
+.search{width:100%;border:1px solid var(--line);border-radius:var(--radius);padding:9px 12px;font-size:13px;background:var(--surface);color:var(--ink);margin-bottom:14px;}
+.view-toggle{display:flex;gap:0;border:1px solid var(--line);border-radius:20px;overflow:hidden;width:fit-content;margin-bottom:22px;}
+.view-toggle-btn{background:var(--surface);border:none;padding:7px 16px;font-size:12.5px;color:var(--ink-soft);}
+.view-toggle-btn.active{background:var(--accent);color:#fff;}
+.grid.list-only{grid-template-columns:1fr;max-width:520px;margin:0 auto;}
 
 /* layout */
 .grid{display:grid;grid-template-columns:1fr 300px;gap:34px;align-items:start;}
@@ -131,7 +137,7 @@ input,select{font-family:inherit;}
 .extra-x{background:none;border:none;color:var(--ink-faint);font-size:13px;padding:0 4px;}
 .extra-x:hover{color:var(--brick);}
 .extra-form{display:flex;gap:6px;margin-top:8px;}
-.extra-form input{flex:1;border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:13px;background:var(--bg);}
+.extra-form input{flex:1;border:1px solid var(--line);border-radius:4px;padding:6px 8px;font-size:13px;background:var(--bg);color:var(--ink);}
 .extra-form button{border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:4px;padding:6px 10px;font-size:12px;}
 .activity-row{display:flex;align-items:flex-start;gap:8px;padding:7px 0;border-bottom:1px solid var(--line);font-size:12px;}
 .activity-row:last-child{border-bottom:none;}
@@ -241,6 +247,13 @@ let DATA = {items:[], extras:[], activity:[], shortcuts:[], people:[], recurring
 let BARCODES = {};
 let ME = null;
 let theme = 'light';
+let viewMode = 'shelves';
+function loadViewMode(){
+  try{ return localStorage.getItem('rebost-view') || 'shelves'; }catch(e){ return 'shelves'; }
+}
+function saveViewMode(v){
+  try{ localStorage.setItem('rebost-view', v); }catch(e){}
+}
 let modalOpen = false;
 let modalDraft = null;
 let modalQuick = false;
@@ -403,16 +416,26 @@ function saveQueue(){
 async function init(){
   ME = loadPerson();
   theme = loadTheme();
+  viewMode = loadViewMode();
   applyTheme();
   pendingQueue = loadQueue();
-  try{
-    await loadData();
+
+  const cached = loadLocalCache();
+  if(cached){ DATA = cached; applyPersonTheme(); render(); }
+
+  const loadPromise = loadData();
+  loadPromise.then(() => {
     connError = false;
-  }catch(e){
-    const cached = loadLocalCache();
-    if(cached){ DATA = cached; connError = false; }
-    else { connError = true; }
-  }
+    applyPersonTheme();
+    render();
+  }).catch(() => {
+    if(!cached){ connError = true; applyPersonTheme(); render(); }
+  });
+
+  await Promise.race([
+    loadPromise.catch(()=>{}),
+    new Promise((resolve) => setTimeout(resolve, 6000))
+  ]);
   applyPersonTheme();
   render();
   subscribeRealtime();
@@ -757,8 +780,19 @@ function exportList(){
 function render(){
   if(!ME){ renderPicker(); return; }
 
+  const activeEl = document.activeElement;
+  const focusSnapshot = (activeEl && activeEl.id) ? {
+    id: activeEl.id,
+    selStart: (typeof activeEl.selectionStart === 'number') ? activeEl.selectionStart : null,
+    selEnd: (typeof activeEl.selectionEnd === 'number') ? activeEl.selectionEnd : null,
+  } : null;
+
   const term = searchTerm.trim().toLowerCase();
-  const lowStock = DATA.items.filter(i => i.is_recurring !== false && (i.quantity === 0 || (i.min_threshold > 0 && i.quantity <= i.min_threshold)));
+  const lowStock = DATA.items.filter(i =>
+    i.is_recurring !== false &&
+    (i.quantity === 0 || (i.min_threshold > 0 && i.quantity <= i.min_threshold)) &&
+    !DATA.extras.some(e => e.name.toLowerCase() === i.name.toLowerCase())
+  );
   const recurringToShow = DATA.recurring.filter(r =>
     !DATA.items.some(i => i.name.toLowerCase() === r.name.toLowerCase()) &&
     !DATA.extras.some(e => e.name.toLowerCase() === r.name.toLowerCase())
@@ -802,10 +836,15 @@ function render(){
 
       <input type="text" class="search" id="searchInput" placeholder="Cerca un article…" value="${esc(searchTerm)}" autocomplete="off">
 
-      <div class="grid">
-        <div>
+      <div class="view-toggle">
+        <button type="button" class="view-toggle-btn ${viewMode==='shelves'?'active':''}" data-view="shelves">Prestatgeries</button>
+        <button type="button" class="view-toggle-btn ${viewMode==='list'?'active':''}" data-view="list">Llista</button>
+      </div>
+
+      <div class="grid ${viewMode==='list'?'list-only':''}">
+        ${viewMode==='shelves' ? `<div>
           ${CATS.map(cat => renderShelf(cat, term)).join('')}
-        </div>
+        </div>` : ''}
 
         <div>
           <div class="side-block">
@@ -893,8 +932,15 @@ function render(){
   `;
 
   bindEvents();
-  restoreSearchFocus();
-  restoreQuickNameFocus();
+  if(focusSnapshot){
+    const el = document.getElementById(focusSnapshot.id);
+    if(el && typeof el.focus === 'function'){
+      el.focus();
+      if(focusSnapshot.selStart !== null && el.setSelectionRange){
+        try{ el.setSelectionRange(focusSnapshot.selStart, focusSnapshot.selEnd); }catch(e){}
+      }
+    }
+  }
   if(scannerOpen) startCamera();
   if(quickAddOpen){
     const qi = document.getElementById('quickAddInput');
@@ -961,18 +1007,16 @@ function renderQuickAddForm(){
     : DATA.catalog.slice(0, 8);
 
   let infoLine = '';
-  if(matched){
-    const bits = [`va a ${esc(matched.category||d.category)}`];
-    if(matched.brand) bits.push(esc(matched.brand));
-    infoLine = `<p class="quick-match-info">Ja el coneixem: ${bits.join(' · ')}</p>`;
-  } else if(typed){
-    infoLine = `<p class="quick-match-info new">Producte nou → es guardarà a ${esc(d.category)}</p>`;
+  if(matched && matched.brand){
+    infoLine = `<p class="quick-match-info">Ja el coneixem: ${esc(matched.brand)}</p>`;
+  } else if(typed && !matched){
+    infoLine = `<p class="quick-match-info new">Producte nou</p>`;
   }
 
   return `
     <div class="overlay" id="overlay">
       <div class="modal quick-add-modal">
-        <h3>Afegeix a ${esc(d.category)}</h3>
+        <h3>Nou article</h3>
         <form id="quickItemForm">
           <div class="field" style="position:relative;">
             <label>Producte</label>
@@ -987,6 +1031,12 @@ function renderQuickAddForm(){
               </div>` : ''}
           </div>
           ${infoLine}
+          <div class="field">
+            <label>Prestatgeria</label>
+            <select id="qf-cat">
+              ${CATS.map(c=>`<option value="${c}" ${c===d.category?'selected':''}>${c}</option>`).join('')}
+            </select>
+          </div>
           <div class="field-row">
             <div class="field">
               <label>Quantitat</label>
@@ -1243,28 +1293,14 @@ function applyScannedCode(code){
 
 /* ---------- events ---------- */
 
-let searchFocused = false;
-let quickNameFocused = false;
-function restoreQuickNameFocus(){
-  const el = document.getElementById('qf-name');
-  if(el && quickNameFocused){
-    el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
-  }
-}
-function restoreSearchFocus(){
-  const el = document.getElementById('searchInput');
-  if(el && searchFocused){
-    el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
-  }
-}
-
 function bindEvents(){
   const personBtn = document.getElementById('personBtn');
   const retryBtn = document.getElementById('retryBtn');
   if(retryBtn) retryBtn.onclick = reloadQuiet;
   const themeBtn = document.getElementById('themeBtn');
+  root.querySelectorAll('[data-view]').forEach(b => {
+    b.onclick = () => { viewMode = b.dataset.view; saveViewMode(viewMode); render(); };
+  });
   if(themeBtn) themeBtn.onclick = toggleTheme;
   const adminBtn = document.getElementById('adminBtn');
   if(adminBtn) adminBtn.onclick = () => { adminScreen = adminUnlocked ? 'panel' : 'password'; adminPassError = false; render(); };
@@ -1279,8 +1315,6 @@ function bindEvents(){
       searchTerm = e.target.value;
       render();
     };
-    searchInput.onfocus = () => { searchFocused = true; };
-    searchInput.onblur = () => { searchFocused = false; };
   }
 
   root.querySelectorAll('[data-newcat]').forEach(b => {
@@ -1432,14 +1466,16 @@ function bindEvents(){
     qfName.addEventListener('input', (e) => {
       modalDraft.name = e.target.value;
       catalogDropdownOpen = true;
+      const exact = DATA.catalog.find(c => c.key === e.target.value.trim().toLowerCase());
+      if(exact && exact.category) modalDraft.category = exact.category;
       render();
     });
-    qfName.addEventListener('focus', () => { quickNameFocused = true; });
     qfName.addEventListener('blur', () => {
-      quickNameFocused = false;
       setTimeout(() => { catalogDropdownOpen = false; render(); }, 150);
     });
   }
+  const qfCat = document.getElementById('qf-cat');
+  if(qfCat) qfCat.addEventListener('change', (e) => { modalDraft.category = e.target.value; });
   const qSearchBtn = document.getElementById('qSearchBtn');
   if(qSearchBtn) qSearchBtn.onclick = () => {
     catalogDropdownOpen = true;
@@ -1450,7 +1486,10 @@ function bindEvents(){
     b.onmousedown = (e) => e.preventDefault(); // evita que el blur tanqui el desplegable abans del clic
     b.onclick = () => {
       const entry = DATA.catalog.find(c => c.key === b.dataset.pickcatalog);
-      if(entry) modalDraft.name = entry.name;
+      if(entry){
+        modalDraft.name = entry.name;
+        if(entry.category) modalDraft.category = entry.category;
+      }
       catalogDropdownOpen = false;
       render();
     };
@@ -1467,7 +1506,7 @@ function bindEvents(){
     const matched = DATA.catalog.find(c => c.key === modalDraft.name.trim().toLowerCase());
     const fields = {
       name: modalDraft.name.trim(),
-      category: (matched && matched.category) || modalDraft.category,
+      category: modalDraft.category,
       quantity: modalDraft.quantity,
       unit: (matched && matched.unit) || '',
       min_threshold: (matched && matched.min_threshold != null) ? matched.min_threshold : 0,
