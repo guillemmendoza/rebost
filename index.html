@@ -847,6 +847,7 @@ function render(){
         </div>` : ''}
 
         <div>
+          ${viewMode==='shelves' ? `
           <div class="side-block">
             <p class="side-title">Caduca aviat</p>
             ${expiringSoon.length === 0
@@ -878,6 +879,7 @@ function render(){
                     <button class="side-action" data-addtolist="${esc(r.name)}">+ llista</button>
                   </div>`).join('')}
           </div>
+          ` : ''}
 
           <div class="side-block">
             <div class="side-hdr">
@@ -899,6 +901,7 @@ function render(){
             </form>
           </div>
 
+          ${viewMode==='shelves' ? `
           <div class="side-block">
             <button type="button" class="side-collapse-toggle" id="activityToggle">
               <span class="side-title" style="margin:0;">Activitat recent</span>
@@ -913,6 +916,7 @@ function render(){
                     <span class="activity-time">${timeAgo(a.created_at)}</span>
                   </div>`).join('')) : ''}
           </div>
+          ` : ''}
         </div>
       </div>
     </div>
