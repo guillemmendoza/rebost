@@ -1216,7 +1216,7 @@ function renderScanner(){
       <div class="modal" style="text-align:center;">
         <h3>Escaneja el codi</h3>
         <video id="scanVideo" class="scan-video" playsinline muted></video>
-        <p class="scan-hint" id="scanHint">Apunta al codi de barres…</p>
+        <p class="scan-hint" id="scanHint">Apunta al codi de barres… (pot trigar un segon a enfocar)</p>
         <div class="field" style="margin-top:6px;">
           <input type="text" id="scanManualInput" placeholder="O escriu el codi a mà" inputmode="numeric">
         </div>
@@ -1266,7 +1266,7 @@ async function startCamera(){
   try{
     await Promise.race([
       reader.decodeFromConstraints(
-        { video: { facingMode: {ideal:'environment'} } },
+        { video: { facingMode: {ideal:'environment'}, focusMode: {ideal:'continuous'}, advanced: [{focusMode:'continuous'}] } },
         video,
         (result, err) => { if(result) applyScannedCode(result.getText()); }
       ),
