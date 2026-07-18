@@ -259,7 +259,6 @@ let modalDraft = null;
 let modalQuick = false;
 let buyingExtraId = null;
 let activityExpanded = false;
-let matchedCatalogKey = null;
 let catalogDropdownOpen = false;
 let modalEditId = null;
 let personMenuOpen = false;
@@ -834,7 +833,7 @@ function render(){
         </div>
       </div>
 
-      <input type="text" class="search" id="searchInput" placeholder="Cerca un article…" value="${esc(searchTerm)}" autocomplete="off">
+      ${viewMode==='shelves' ? `<input type="text" class="search" id="searchInput" placeholder="Cerca un article…" value="${esc(searchTerm)}" autocomplete="off">` : ''}
 
       <div class="view-toggle">
         <button type="button" class="view-toggle-btn ${viewMode==='shelves'?'active':''}" data-view="shelves">Prestatgeries</button>
@@ -1324,7 +1323,7 @@ function bindEvents(){
   root.querySelectorAll('[data-newcat]').forEach(b => {
     b.onclick = () => {
       modalDraft = {name:'', category:b.dataset.newcat, quantity:1, unit:'', minThreshold:0, expiryDate:'', barcode:'', brand:'', store:'', notes:'', openedDate:'', shelfLifeDays:'', expiryType:'caducitat'};
-      modalEditId = null; modalQuick = true; matchedCatalogKey = null; catalogDropdownOpen = false; modalOpen = true; render();
+      modalEditId = null; modalQuick = true; catalogDropdownOpen = false; modalOpen = true; render();
     };
   });
   root.querySelectorAll('[data-edit]').forEach(el => {
@@ -1715,7 +1714,7 @@ function bindEvents(){
   });
 }
 
-function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; modalQuick = false; matchedCatalogKey = null; catalogDropdownOpen = false; buyingExtraId = null; render(); }
+function closeModal(){ modalOpen = false; modalDraft = null; modalEditId = null; modalQuick = false; catalogDropdownOpen = false; buyingExtraId = null; render(); }
 
 function renderDuplicate(){
   const {existing, incoming} = duplicateState;
